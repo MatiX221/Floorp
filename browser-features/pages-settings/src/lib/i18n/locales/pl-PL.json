@@ -394,7 +394,7 @@
         "icon": "Icon",
         "width": "Width",
         "zoomLevel": "Zoom Level",
-        "container": "Kontener",
+        "container": "Container",
         "noContainer": "Bez kontenera",
         "useUserAgent": "Use Mobile User Agent",
         "panelType": "Panel Type",
@@ -426,7 +426,7 @@
             "staticPanelRequired": "Please select a sidebar tool",
             "invalidWidth": "Width must be at least 100 pixels"
         },
-        "save": "Zapisz",
+        "save": "Save",
         "cancel": "Anuluj"
     },
     "progressiveWebApp": {
@@ -451,14 +451,7 @@
         "uninstallWarning": "Are you sure you want to uninstall \"{{name}}\"?",
         "cancel": "Cancel",
         "rename": "Rename",
-        "uninstall": "Uninstall",
-        "container": "Kontener",
-        "noContainer": "Bez kontenera",
-        "setContainer": "Ustaw kontener",
-        "containerDescription": "Wybierz kontener Firefox, w którym ta aplikacja będzie otwierana. Kontenery izolują ciasteczka i dane witryn.",
-        "containerDeleted": "Kontener usunięty",
-        "save": "Zapisz",
-        "errorSettingContainer": "Nie udało się ustawić kontenera"
+        "uninstall": "Uninstall"
     },
     "floorpOS": {
         "title": "{{productName}} OS",
@@ -533,10 +526,10 @@
         "actionDescription": "Description of the gesture",
         "rockerGesturesEnabled": "Enable rocker gestures",
         "rockerGesturesDescription": "Right-click and move left to go back, right-click and move right to go forward. (Experimental)",
-        "rockerLeftRight": "Left → Right",
-        "rockerLeftRightDescription": "Hold left button, then click right button",
-        "rockerRightLeft": "Right → Left",
-        "rockerRightLeftDescription": "Hold right button, then click left button",
+        "rockerLeftRight": "Lewy → Prawy",
+        "rockerLeftRightDescription": "Przytrzymaj lewy przycisk, następnie kliknij prawym",
+        "rockerRightLeft": "Prawy → Lewy",
+        "rockerRightLeftDescription": "Przytrzymaj prawy przycisk, następnie kliknij lewym",
         "wheelGesturesEnabled": "Enable wheel gestures",
         "actions": {
             "gecko-back": "Go Back",
@@ -612,9 +605,7 @@
             "gecko-scroll-to-top": "Scroll to Top",
             "gecko-scroll-to-bottom": "Scroll to Bottom",
             "gecko-workspace-next": "Switch to Next Workspace",
-            "gecko-workspace-previous": "Switch to Previous Workspace",
-            "floorp-toggle-zen-mode": "Toggle Zen Mode",
-            "floorp-toggle-command-palette": "Toggle Command Palette"
+            "gecko-workspace-previous": "Switch to Previous Workspace"
         },
         "edit": "Edit",
         "duplicate": "Duplicate",
