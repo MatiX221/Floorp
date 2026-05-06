@@ -641,7 +641,7 @@ jobs:
               done
             done
           else
-            git apply --reject ./tools/patches/*.patch --directory "$(realpath ../obj-artifact-build-output/dist/bin)" --unsafe-paths --check --apply
+            git apply --reject ./tools/patches/*.patch --directory ../obj-artifact-build-output/dist/bin --unsafe-paths --check --apply
           fi
 
           cd ..
@@ -1181,11 +1181,11 @@ jobs:
                 # Verify signed entitlements — fail CI if passkey entitlement is missing.
                 echo "=== Verifying signed bundle entitlements ==="
                 ENTITLEMENT_INFO=$(rcodesign print-signature-info "$APP_FILE" 2>&1 || true)
-                echo "${ENTITLEMENT_INFO:0:10000}"
+                echo "$ENTITLEMENT_INFO" | head -100
                 echo "=== End entitlement verification ==="
 
                 # Assert: passkey entitlement must be present in the signed binary
-                if [[ "$ENTITLEMENT_INFO" != *"public-key-credential"* ]]; then
+                if ! echo "$ENTITLEMENT_INFO" | grep -q 'public-key-credential'; then
                   echo "ERROR: com.apple.developer.web-browser.public-key-credential not found in signed entitlements!" >&2
                   echo "The passkey (WebAuthn) entitlement was not embedded during signing." >&2
                   exit 1
