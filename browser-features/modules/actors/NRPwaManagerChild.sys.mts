@@ -40,7 +40,7 @@ export class NRPwaManagerChild extends JSWindowActorChild {
   ) {
     // deno-lint-ignore no-explicit-any
     const promise = new Promise<Record<string, any>>((resolve, _reject) => {
-      this.pendingGetInstalledAppsResolvers.push(resolve);
+      this.resolveGetInstalledApps = resolve;
     });
     this.sendAsyncMessage("PwaManager:GetInstalledApps");
     promise.then((installedApps) => callback(installedApps));
@@ -55,34 +55,34 @@ export class NRPwaManagerChild extends JSWindowActorChild {
   }
 
   NRGetContainers(
-    callback: (containers: { userContextId: number; name: string }[]) => void =
-      () => {},
+    callback: (containersJson: string) => void = () => {},
   ) {
     const promise = new Promise<string>((resolve, _reject) => {
-      this.pendingGetContainersResolvers.push(resolve);
+      this.resolveGetContainers = resolve;
     });
     this.sendAsyncMessage("PwaManager:GetContainers");
-    // Parent sends a JSON string to avoid cross-compartment permission errors.
-    // Pass the raw string to the callback; the content-side code parses it.
-    promise.then((containers) => callback(containers));
+    promise.then((containersJson) => callback(containersJson));
   }
 
   NRSetSsbContainer(id: string, userContextId: number) {
     this.sendAsyncMessage("PwaManager:SetContainer", { id, userContextId });
   }
 
-  pendingGetInstalledAppsResolvers:
+  resolveGetInstalledApps:
     // deno-lint-ignore no-explicit-any
-    Array<(installedApps: Record<string, any>) => void> = [];
+    | ((installedApps: Record<string, any>) => void)
+    | null = null;
   resolveRenameSsb: ((id: string, newName: string) => void) | null = null;
   resolveUninstallSsb: ((id: string) => void) | null = null;
-  pendingGetContainersResolvers: Array<(containersJson: string) => void> = [];
+  resolveGetContainers:
+    | ((containersJson: string) => void)
+    | null = null;
   // deno-lint-ignore require-await
   async receiveMessage(message: ReceiveMessageArgument) {
     switch (message.name) {
       case "PwaManager:GetInstalledApps": {
-        const resolver = this.pendingGetInstalledAppsResolvers.shift();
-        resolver?.(message.data);
+        this.resolveGetInstalledApps?.(message.data);
+        this.resolveGetInstalledApps = null;
         break;
       }
       case "PwaManager:RenameSsb": {
@@ -99,8 +99,8 @@ export class NRPwaManagerChild extends JSWindowActorChild {
         break;
       }
       case "PwaManager:GetContainers": {
-        const resolver = this.pendingGetContainersResolvers.shift();
-        resolver?.(message.data);
+        this.resolveGetContainers?.(message.data);
+        this.resolveGetContainers = null;
         break;
       }
     }

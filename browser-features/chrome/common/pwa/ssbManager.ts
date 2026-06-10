@@ -9,28 +9,6 @@ import { DataManager as DataManagerClass } from "./dataStore.ts";
 import type { Browser, Manifest } from "./type.ts";
 import { SsbRunner } from "./ssbRunner.ts";
 
-type SsbObserverPayload = {
-  wrappedJSObject?: {
-    id?: string;
-    newName?: string;
-    userContextId?: number;
-    key?: string;
-  };
-};
-
-function getSsbObserverPayload(
-  subject: unknown,
-): SsbObserverPayload["wrappedJSObject"] {
-  if (typeof subject !== "object" || subject === null) {
-    return undefined;
-  }
-  const payload = (subject as SsbObserverPayload).wrappedJSObject;
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  return payload;
-}
-
 const { AppConstants } = ChromeUtils.importESModule(
   "resource://gre/modules/AppConstants.sys.mjs",
 );
@@ -65,55 +43,20 @@ export class SiteSpecificBrowserManager {
 
     globalThis.gBrowser.addTabsProgressListener(this.listener);
 
-    Services.obs.addObserver(async (subject: unknown) => {
-      try {
-        const payload = getSsbObserverPayload(subject);
-        const id = payload?.id;
-        const newName = payload?.newName;
-        if (!id || !newName) {
-          return;
-        }
-        await this.renameSsb(id, newName);
-      } catch (error) {
-        console.error(
-          "[SiteSpecificBrowserManager] rename observer failed:",
-          error,
-        );
-      }
+    // deno-lint-ignore no-explicit-any
+    Services.obs.addObserver(async (subject: any) => {
+      await this.renameSsb(
+        subject?.wrappedJSObject?.id as string,
+        subject?.wrappedJSObject?.newName as string,
+      );
     }, "nora-ssb-rename");
 
-    Services.obs.addObserver(async (subject: unknown) => {
-      try {
-        const payload = getSsbObserverPayload(subject);
-        const id = payload?.id;
-        if (!id) {
-          return;
-        }
-        await this.uninstallById(id);
-      } catch (error) {
-        console.error(
-          "[SiteSpecificBrowserManager] uninstall observer failed:",
-          error,
-        );
-      }
+    // deno-lint-ignore no-explicit-any
+    Services.obs.addObserver(async (subject: any) => {
+      await this.uninstallById(subject?.wrappedJSObject?.id as string);
     }, "nora-ssb-uninstall");
 
-    Services.obs.addObserver(async (subject: unknown) => {
-      try {
-        const payload = getSsbObserverPayload(subject);
-        const id = payload?.id;
-        const userContextId = payload?.userContextId;
-        if (!id || userContextId == null) {
-          return;
-        }
-        await this.setContainerForSsb(id, userContextId);
-      } catch (error) {
-        console.error(
-          "[SiteSpecificBrowserManager] Failed to set SSB container",
-          error,
-        );
-      }
-    }, "nora-ssb-set-container");
+
   }
 
   private listener = {
@@ -397,11 +340,8 @@ export class SiteSpecificBrowserManager {
       ssbObj.start_url,
       ssbObj.userContextId ?? 0,
     );
-
-    // Remove from old key
     await this.dataManager.removeSsbData(oldKey);
 
-    // Save with new key
     const updatedManifest: Manifest = {
       ...ssbObj,
       userContextId: userContextId > 0 ? userContextId : undefined,

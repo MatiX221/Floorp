@@ -88,21 +88,20 @@ export type Container = {
 export function getContainers(): Promise<Container[]> {
   return new Promise((resolve, _reject) => {
     try {
-      globalThis.NRGetContainers((containers: string) => {
-        if (!containers) {
-          resolve([]);
-          return;
-        }
+      if (typeof globalThis.NRGetContainers !== "function") {
+        resolve([]);
+        return;
+      }
+      globalThis.NRGetContainers((containersJson: string) => {
         try {
-          const parsed = JSON.parse(containers);
-          resolve(parsed);
-        } catch (_e) {
-          console.error("Failed to parse containers:", containers);
+          resolve(JSON.parse(containersJson));
+        } catch (e) {
+          console.error("[PWA:dataManager] Failed to parse containers JSON:", e);
           resolve([]);
         }
       });
     } catch (e) {
-      console.error("Failed to get containers:", e);
+      console.error("[PWA:dataManager] Failed to get containers:", e);
       resolve([]);
     }
   });
