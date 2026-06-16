@@ -68,6 +68,31 @@ export class StatusBarManager {
       appContent.appendChild(statusbarNode);
     }
 
+    // Set up button press handler
+    statusbarNode.addEventListener("mousedown", (event) => {
+      let toolbarButton = event.target.closest("toolbarbutton");
+
+      if (!toolbarButton) {
+        // No button pressed
+        return;
+      }
+
+      switch (toolbarButton.id) {
+        case "firefox-view-button":
+          globalThis.FirefoxViewHandler.openToolbarMouseEvent(event);
+          break;
+        case "alltabs-button":
+          globalThis.gTabsPanel.showAllTabsPanel(event, "alltabs-button");
+          break;
+        case "downloads-button":
+          globalThis.DownloadsIndicatorView.onCommand(event);
+          break;
+        case "library-button":
+          globalThis.PanelUI.showSubView("appMenu-libraryView", toolbarButton, event);
+          break;
+      }
+    });
+
     createEffect(() => {
       const statuspanelLabel = document?.querySelector("#statuspanel-label");
       const statuspanel = document?.querySelector<XULElement>("#statuspanel") ??
