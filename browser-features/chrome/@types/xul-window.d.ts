@@ -193,6 +193,15 @@ declare namespace globalThis {
   var gFloorpPanelSidebarCurrentPanel: unknown;
   var gFloorpPanelSidebar: unknown;
   var floorpWebPanelWindow: unknown;
+  var floorpWebPanelContentBrowser: XULElement & {
+    browserId?: string;
+    audioMuted?: boolean;
+    fullZoom?: number;
+    reload?: () => void;
+    goBack?: () => void;
+    goForward?: () => void;
+    loadURI?: (uri: nsIURI, options?: Record<string, unknown>) => void;
+  };
   var floorpSsbWindow: unknown;
   var floorpBmsUserAgent: unknown;
   var gMiddleClickNewTabUsesPasteboard: unknown;
