@@ -16,6 +16,14 @@ import leptonChromeStylesRaw from "@nora/skin/lepton/css/leptonChrome.css?raw";
 import leptonContentStylesRaw from "@nora/skin/lepton/css/leptonContent.css?raw";
 import fluerialStylesRaw from "@nora/skin/fluerial/css/fluerial.css?raw";
 
+// Additional CSS for Lepton/Photon themes: nav-bar background color fix
+const navBarBackgroundColorCSS = `
+#nav-bar {
+  background-color: var(--tab-selected-bgcolor, var(--toolbar-bgcolor)) !important;
+  color: var(--toolbar-text-color);
+}
+`;
+
 interface FCSS {
   styles?: string[]; // chrome:// URLs for production (AGENT_SHEET - applies to all documents)
   stylesRaw?: string[]; // Raw CSS content for development (AGENT_SHEET - applies to all documents)
@@ -62,7 +70,7 @@ export function getCSSFromConfig(
     case "lepton": {
       if (isDev) {
         return {
-          chromeStylesRaw: [leptonChromeStylesRaw, leptonContentStylesRaw],
+          chromeStylesRaw: [leptonChromeStylesRaw, leptonContentStylesRaw, navBarBackgroundColorCSS],
           iconBasePath: "http://localhost:5174/lepton/icons",
           userjs: leptonUserJs,
         };
@@ -72,6 +80,7 @@ export function getCSSFromConfig(
           getStylePath("lepton/css/leptonChrome.css"),
           getStylePath("lepton/css/leptonContent.css"),
         ],
+        chromeStylesRaw: [navBarBackgroundColorCSS],
         userjs: leptonUserJs,
       };
     }
@@ -79,7 +88,7 @@ export function getCSSFromConfig(
     case "photon": {
       if (isDev) {
         return {
-          chromeStylesRaw: [leptonChromeStylesRaw],
+          chromeStylesRaw: [leptonChromeStylesRaw, navBarBackgroundColorCSS],
           stylesRaw: [leptonContentStylesRaw],
           iconBasePath: "http://localhost:5174/lepton/icons",
           userjs: photonUserJs,
@@ -87,6 +96,7 @@ export function getCSSFromConfig(
       }
       return {
         chromeStyles: [getStylePath("lepton/css/leptonChrome.css")],
+        chromeStylesRaw: [navBarBackgroundColorCSS],
         styles: [getStylePath("lepton/css/leptonContent.css")],
         userjs: photonUserJs,
       };
@@ -95,7 +105,7 @@ export function getCSSFromConfig(
     case "protonfix": {
       if (isDev) {
         return {
-          chromeStylesRaw: [leptonChromeStylesRaw],
+          chromeStylesRaw: [leptonChromeStylesRaw, navBarBackgroundColorCSS],
           stylesRaw: [leptonContentStylesRaw],
           iconBasePath: "http://localhost:5174/lepton/icons",
           userjs: protonfixUserJs,
@@ -104,6 +114,7 @@ export function getCSSFromConfig(
       }
       return {
         chromeStyles: [getStylePath("lepton/css/leptonChrome.css")],
+        chromeStylesRaw: [navBarBackgroundColorCSS],
         styles: [getStylePath("lepton/css/leptonContent.css")],
         userjs: protonfixUserJs,
         useTabColorAsToolbarColor: true,
