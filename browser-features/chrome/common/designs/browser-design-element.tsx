@@ -8,6 +8,7 @@ import { applyUserJS } from "./utils/userjs-parser.ts";
 import styleBrowser from "./browser.css?inline";
 import { config } from "./configs.ts";
 import { getCSSFromConfig } from "./utils/css.ts";
+import { TAB_COLOR_LIKE_TOOLBAR_CSS } from "./utils/tab-color-like-toolbar.css.ts";
 
 const AGENT_SHEET = Ci.nsIStyleSheetService.AGENT_SHEET as number;
 const sss = Cc["@mozilla.org/content/style-sheet-service;1"].getService(
@@ -46,20 +47,10 @@ export function BrowserDesignElement() {
     const registeredURIs: nsIURI[] = [];
 
     if (useTabColorAsToolbarColor === true) {
-      console.log(
-        "[BrowserDesignElement] Applying tab color as toolbar color CSS",
-      );
       if (!tabColorSheetURI) {
-        const css = `
-        .tab-background {
-          &:is([selected], [multiselected]) {
-            background: var(--toolbar-bgcolor) !important;
-          }
-        }
-      `;
         try {
           const dataUri = `data:text/css;charset=utf-8,${
-            encodeURIComponent(css)
+            encodeURIComponent(TAB_COLOR_LIKE_TOOLBAR_CSS)
           }`;
           const uri = Services.io.newURI(dataUri);
           sss.loadAndRegisterSheet(uri, AGENT_SHEET);

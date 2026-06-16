@@ -15,6 +15,10 @@ import protonfixUserJs from "@nora/skin/lepton/userjs/protonfix.js?raw";
 import leptonChromeStylesRaw from "@nora/skin/lepton/css/leptonChrome.css?raw";
 import leptonContentStylesRaw from "@nora/skin/lepton/css/leptonContent.css?raw";
 import fluerialStylesRaw from "@nora/skin/fluerial/css/fluerial.css?raw";
+import {
+  FLUERIAL_TAB_CORNER_CSS,
+  TAB_COLOR_LIKE_TOOLBAR_CSS,
+} from "./tab-color-like-toolbar.css.ts";
 
 // Additional CSS for Lepton/Photon themes: nav-bar background color fix
 const navBarBackgroundColorCSS = `
@@ -54,7 +58,11 @@ export function getCSSFromConfig(
     case "fluerial": {
       if (isDev) {
         return {
-          chromeStylesRaw: [fluerialStylesRaw],
+          chromeStylesRaw: [
+            fluerialStylesRaw,
+            TAB_COLOR_LIKE_TOOLBAR_CSS,
+            FLUERIAL_TAB_CORNER_CSS,
+          ],
           iconBasePath: "http://localhost:5174/fluerial/icons",
           userjs: null,
           useTabColorAsToolbarColor: true,
@@ -62,6 +70,7 @@ export function getCSSFromConfig(
       }
       return {
         chromeStyles: [getStylePath("fluerial/css/fluerial.css")],
+        chromeStylesRaw: [TAB_COLOR_LIKE_TOOLBAR_CSS, FLUERIAL_TAB_CORNER_CSS],
         userjs: null,
         useTabColorAsToolbarColor: true,
       };
@@ -70,7 +79,11 @@ export function getCSSFromConfig(
     case "lepton": {
       if (isDev) {
         return {
-          chromeStylesRaw: [leptonChromeStylesRaw, leptonContentStylesRaw, navBarBackgroundColorCSS],
+          chromeStylesRaw: [
+            leptonChromeStylesRaw,
+            leptonContentStylesRaw,
+            navBarBackgroundColorCSS,
+          ],
           iconBasePath: "http://localhost:5174/lepton/icons",
           userjs: leptonUserJs,
         };
