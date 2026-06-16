@@ -11,13 +11,9 @@ export const WEB_PANEL_CONTENT_BROWSER_ID = "floorp-webpanel-content-browser";
 const PANEL_SIDEBAR_DATA_PREF_NAME =
   PanelSidebarStaticNames.panelSidebarDataPrefName;
 
-export type WebPanelBrowserElement = XULElement & {
-  browserId?: string;
+export type WebPanelBrowserElement = XULBrowserElement & {
   audioMuted?: boolean;
   fullZoom?: number;
-  docShellIsActive?: boolean;
-  browsingContext?: { allowJavascript?: boolean };
-  loadURI?: (uri: nsIURI, options?: Record<string, unknown>) => void;
   reload?: () => void;
   goBack?: () => void;
   goForward?: () => void;
@@ -49,7 +45,7 @@ export function getPanelDataById(panelId: string): Panel | null {
 /** Chrome window embedded inside the sidebar `<browser>`. */
 export function getWebPanelChromeWindow(
   webpanelId: string,
-  parentWindow: Window = globalThis,
+  parentWindow: Window = globalThis as unknown as Window,
 ): (Window & { floorpWebPanelContentBrowser?: WebPanelBrowserElement }) | null {
   const sidebarBrowser = parentWindow.document?.getElementById(
     `sidebar-panel-${webpanelId}`,
@@ -65,7 +61,7 @@ export function getWebPanelChromeWindow(
 /** Content `<browser>` that displays the web panel URL inside browser.xhtml. */
 export function getWebPanelContentBrowser(
   webpanelId: string,
-  parentWindow: Window = globalThis,
+  parentWindow: Window = globalThis as unknown as Window,
 ): WebPanelBrowserElement | null {
   const chromeWindow = getWebPanelChromeWindow(webpanelId, parentWindow);
   if (!chromeWindow) {

@@ -193,14 +193,12 @@ declare namespace globalThis {
   var gFloorpPanelSidebarCurrentPanel: unknown;
   var gFloorpPanelSidebar: unknown;
   var floorpWebPanelWindow: unknown;
-  var floorpWebPanelContentBrowser: XULElement & {
-    browserId?: string;
+  var floorpWebPanelContentBrowser: XULBrowserElement & {
     audioMuted?: boolean;
     fullZoom?: number;
     reload?: () => void;
     goBack?: () => void;
     goForward?: () => void;
-    loadURI?: (uri: nsIURI, options?: Record<string, unknown>) => void;
   };
   var floorpSsbWindow: unknown;
   var floorpBmsUserAgent: unknown;
@@ -232,6 +230,7 @@ declare namespace globalThis {
     ): string;
   };
   var E10SUtils: {
+    DEFAULT_REMOTE_TYPE: string;
     EXTENSION_REMOTE_TYPE: string;
     deserializePrincipal(principal: unknown): unknown;
     getRemoteTypeForURI(uri: string, ...args: unknown[]): string;
