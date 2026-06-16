@@ -23,9 +23,8 @@ export let isFirstRun = false;
 export let isUpdated = false;
 
 /**
- * Get nsIComponentRegistrar from Components.manager.
- * Components.manager implements nsIComponentRegistrar at runtime,
- * but TypeScript definitions don't reflect this directly.
+ * Get nsIComponentRegistrar from Components.manager via QueryInterface.
+ * Components.manager needs explicit QI to access registerFactory.
  */
 function getComponentRegistrar(): nsIComponentRegistrar | null {
   try {
@@ -33,7 +32,12 @@ function getComponentRegistrar(): nsIComponentRegistrar | null {
     if (cm === undefined || cm === null) {
       return null;
     }
-    return cm as unknown as nsIComponentRegistrar;
+    // Components.manager has QueryInterface at runtime but TypeScript defs don't reflect it
+    const maybeQI = (cm as unknown as { QueryInterface?: (iid: nsIID) => unknown }).QueryInterface;
+    if (typeof maybeQI !== "function") {
+      return null;
+    }
+    return maybeQI.call(cm, Ci.nsIComponentRegistrar) as nsIComponentRegistrar;
   } catch (e) {
     console.error("[NoranekoStartup] Failed to get nsIComponentRegistrar:", e);
     return null;
