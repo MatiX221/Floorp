@@ -413,6 +413,18 @@ export class SiteSpecificBrowserManager {
       ...ssbObj,
       userContextId: userContextId > 0 ? userContextId : undefined,
     };
+
+    const newKey = DataManagerClass.buildKey(
+      ssbObj.start_url,
+      userContextId > 0 ? userContextId : 0,
+    );
+    if (newKey !== oldKey) {
+      const currentSsbData = await this.dataManager.getCurrentSsbData();
+      if (currentSsbData[newKey]) {
+        return false;
+      }
+    }
+
     return await this.dataManager.moveSsbKey(oldKey, updatedManifest);
   }
 
