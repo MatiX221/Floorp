@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { createMemo, createSignal, For, type Accessor } from "solid-js";
+import { type Accessor, createMemo, createSignal, For } from "solid-js";
 import type { JSX } from "solid-js";
 import { getPublicContainerOptions } from "./containerUtils.ts";
 import i18next from "i18next";
@@ -25,7 +25,9 @@ function hideMenuPopup(menuitem: XULElement): void {
   popup.hidePopup?.();
 }
 
-export function SsbContainerSelect(props: SsbContainerSelectProps): JSX.Element {
+export function SsbContainerSelect(
+  props: SsbContainerSelectProps,
+): JSX.Element {
   const [containerLabel, setContainerLabel] = createSignal(
     i18next.t(props.labelKey ?? "ssb.page-action.container"),
   );
@@ -38,13 +40,15 @@ export function SsbContainerSelect(props: SsbContainerSelectProps): JSX.Element 
 
   const selectedLabel = createMemo(() => {
     const selectedId = props.selectedId();
-    const match = options().find((option) => option.userContextId === selectedId);
+    const match = options().find((option) =>
+      option.userContextId === selectedId
+    );
     return match?.label ?? options()[0]?.label ?? "";
   });
 
   const isDisabled = () => props.disabled?.() === true;
 
-  const handleItemClick = (userContextId: number) => (event: MouseEvent) => {
+  const handleItemCommand = (userContextId: number) => (event: Event) => {
     event.stopPropagation();
 
     const menuitem = event.currentTarget as XULElement;
@@ -83,7 +87,10 @@ export function SsbContainerSelect(props: SsbContainerSelectProps): JSX.Element 
                 label={option.label}
                 value={String(option.userContextId)}
                 closemenu="none"
-                onClick={handleItemClick(option.userContextId)}
+                checked={option.userContextId === props.selectedId()
+                  ? true
+                  : undefined}
+                onCommand={handleItemCommand(option.userContextId)}
               />
             )}
           </For>

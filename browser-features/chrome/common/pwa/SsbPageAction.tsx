@@ -8,7 +8,10 @@ import type { JSX } from "solid-js";
 import { render } from "@nora/solid-xul";
 import type { PwaService } from "./pwaService.ts";
 import type { Browser } from "./type.ts";
-import { getUserContextIdForBrowser, isContainerExperimentEnabled } from "./containerUtils.ts";
+import {
+  getUserContextIdForBrowser,
+  isContainerExperimentEnabled,
+} from "./containerUtils.ts";
 import { SsbContainerSelect } from "./SsbContainerSelect.tsx";
 import i18next from "i18next";
 import { addI18nObserver } from "#i18n/config-browser-chrome.ts";
@@ -85,7 +88,10 @@ export class SsbPageAction {
     this.pwaService.updateUIElements(isInstalled);
   }
 
-  private async updatePanelInstallState(browser: Browser, userContextId: number) {
+  private async updatePanelInstallState(
+    browser: Browser,
+    userContextId: number,
+  ) {
     const installed = await this.pwaService.checkPageIsInstalledForContainer(
       browser,
       userContextId,
@@ -160,12 +166,14 @@ export class SsbPageAction {
     this.icon[1]("");
     this.title[1]("");
     this.description[1]("");
-  };
+  }
 
   private closePopup = () => {
-    const panel = document?.getElementById("ssb-panel") as unknown as XULElement & {
-      hidePopup: () => void;
-    };
+    const panel = document?.getElementById("ssb-panel") as unknown as
+      & XULElement
+      & {
+        hidePopup: () => void;
+      };
     if (panel) {
       panel.hidePopup();
     }
@@ -235,6 +243,7 @@ export class SsbPageAction {
                   <SsbContainerSelect
                     selectedId={selectedContainerId}
                     onSelect={this.onContainerSelect}
+                    menuPopupLevel="parent"
                   />
                 )}
                 <xul:hbox id="ssb-button-hbox">
