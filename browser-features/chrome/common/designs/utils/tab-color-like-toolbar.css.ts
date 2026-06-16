@@ -8,9 +8,30 @@ export const TOOLBAR_SURFACE =
   "var(--toolbar-background-color, var(--toolbar-bgcolor))";
 
 /**
- * Fluerial-only: rounded tab bottom corners that connect to the toolbar surface.
+ * Fluerial-only: selected tab layout + rounded bottom corners.
+ * Restores --tab-block-margin top gap (TAB_COLOR_LIKE_TOOLBAR fills .tab-content).
  */
 export const FLUERIAL_TAB_CORNER_CSS = `
+#TabsToolbar
+  #tabbrowser-tabs
+  .tabbrowser-tab:is([visuallyselected], [multiselected])
+  > .tab-stack
+  > .tab-content {
+  margin-block-start: var(--tab-block-margin, 4px) !important;
+  margin-block-end: 0 !important;
+  border-radius: 8px 8px 0 0 !important;
+  height: calc(100% - var(--tab-block-margin, 4px)) !important;
+}
+
+#TabsToolbar
+  #tabbrowser-tabs
+  .tabbrowser-tab:is([visuallyselected], [multiselected])
+  > .tab-stack
+  > .tab-background:is([selected], [multiselected]) {
+  margin-block-start: var(--tab-block-margin, 4px) !important;
+  margin-block-end: 0 !important;
+}
+
 #TabsToolbar
   #tabbrowser-tabs
   .tabbrowser-tab:is([visuallyselected], [multiselected])
