@@ -621,17 +621,37 @@ jobs:
 
       - name: Inject Noraneko
         run: |
+          set -euo pipefail
+
+          DIST_ROOT="$GITHUB_WORKSPACE/obj-artifact-build-output/dist"
+          BUILDID2_SRC="$GITHUB_WORKSPACE/noraneko/_dist/buildid2"
+          PATCH_TARGET="$DIST_ROOT/bin"
+
+          copy_buildid2() {
+            local dest_root="$1"
+            if [ ! -f "$BUILDID2_SRC" ]; then
+              echo "Warning: buildid2 source not found at $BUILDID2_SRC" >&2
+              return 0
+            fi
+            if [ ! -d "$dest_root" ]; then
+              return 0
+            fi
+            mkdir -p "$dest_root/browser"
+            cp "$BUILDID2_SRC" "$dest_root/browser/buildid2"
+            echo "Copied buildid2 to $dest_root/browser/buildid2"
+          }
+
           cd ./noraneko
           deno task feles-build build --phase after-mach
 
           # https://www.spinics.net/lists/git/msg391750.html
-          rsync -aL ../obj-artifact-build-output/dist/bin/ ../obj-artifact-build-output/dist/tmp__bin
-          rm -rf ../obj-artifact-build-output/dist/bin
-          mv ../obj-artifact-build-output/dist/tmp__bin ../obj-artifact-build-output/dist/bin
+          rsync -aL "$PATCH_TARGET/" "$DIST_ROOT/tmp__bin"
+          rm -rf "$PATCH_TARGET"
+          mv "$DIST_ROOT/tmp__bin" "$PATCH_TARGET"
 
           if [[ "$CANON_PLATFORM" == "macOS-x86_64" ]]; then
             for patch_file in ./tools/patches/*.patch; do
-              for resource_dir in ../obj-artifact-build-output/dist/*.app/Contents/Resources; do
+              for resource_dir in "$DIST_ROOT"/*.app/Contents/Resources; do
                 if patch --follow-symlinks --dry-run -d "$resource_dir" -p1 < "$patch_file"; then
                   patch --follow-symlinks -d "$resource_dir" -p1 < "$patch_file"
                 else
@@ -640,8 +660,20 @@ jobs:
                 fi
               done
             done
+            shopt -s nullglob
+            for app_bundle in "$DIST_ROOT"/*.app "$DIST_ROOT"/floorp/*.app; do
+              if [ -d "$app_bundle/Contents/Resources" ]; then
+                copy_buildid2 "$app_bundle/Contents/Resources"
+              fi
+            done
+            shopt -u nullglob || true
           else
-            git apply --reject ./tools/patches/*.patch --directory ../obj-artifact-build-output/dist/bin --unsafe-paths --check --apply
+            # Git 2.54+ rejects --directory paths starting with ../
+            git apply --reject ./tools/patches/*.patch --directory "$PATCH_TARGET" --unsafe-paths --check --apply
+            copy_buildid2 "$PATCH_TARGET"
+            for candidate in "$DIST_ROOT/floorp" "$DIST_ROOT/noraneko"; do
+              copy_buildid2 "$candidate"
+            done
           fi
 
           cd ..
