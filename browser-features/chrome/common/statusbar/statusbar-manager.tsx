@@ -75,7 +75,8 @@ export class StatusBarManager {
         return;
       }
 
-      let toolbarButton = event.target.closest("toolbarbutton");
+      const target = event.target as Element;
+      const toolbarButton = target.closest("toolbarbutton");
 
       if (!toolbarButton) {
         // No button pressed
@@ -83,18 +84,20 @@ export class StatusBarManager {
       }
 
       try {
+        // deno-lint-ignore no-explicit-any
+        const gThis = globalThis as any;
         switch (toolbarButton.id) {
           case "firefox-view-button":
-            globalThis.FirefoxViewHandler.openToolbarMouseEvent(event);
+            gThis.FirefoxViewHandler?.openToolbarMouseEvent?.(event);
             break;
           case "alltabs-button":
-            globalThis.gTabsPanel.showAllTabsPanel(event, "alltabs-button");
+            gThis.gTabsPanel?.showAllTabsPanel?.(event, "alltabs-button");
             break;
           case "downloads-button":
-            globalThis.DownloadsIndicatorView.onCommand(event);
+            gThis.DownloadsIndicatorView?.onCommand?.(event);
             break;
           case "library-button":
-            globalThis.PanelUI.showSubView("appMenu-libraryView", toolbarButton, event);
+            gThis.PanelUI?.showSubView?.("appMenu-libraryView", toolbarButton);
             break;
         }
       } catch(e) {
