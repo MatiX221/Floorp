@@ -109,14 +109,40 @@ const buildRuntimeUrl = (entryName: string): string =>
   `${RUNTIME_BASE_URL}${entryName}`;
 
 const fetchRuntimeIndex = async (): Promise<RuntimeDeployIndex> => {
-  const resp = await fetch(RUNTIME_INDEX_URL, {
-    headers: { Accept: "application/json" },
-    redirect: "follow",
-  });
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} while fetching runtime index`);
+  const maxAttempts = 5;
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const resp = await fetch(RUNTIME_INDEX_URL, {
+        headers: { Accept: "application/json" },
+        redirect: "follow",
+      });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status} while fetching runtime index`);
+      }
+
+      const index = (await resp.json()) as RuntimeDeployIndex;
+      if (filterRuntimeEntries(index).length === 0) {
+        throw new Error(
+          "Runtime build index does not contain any downloadable file entries.",
+        );
+      }
+
+      return index;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxAttempts) {
+        const delayMs = 1000 * attempt;
+        logger.warn(
+          `Runtime index fetch failed (attempt ${attempt}/${maxAttempts}): ${lastError.message}. Retrying in ${delayMs}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
   }
-  return (await resp.json()) as RuntimeDeployIndex;
+
+  throw lastError ?? new Error("Failed to fetch runtime index");
 };
 
 /**

@@ -48,6 +48,11 @@ jobs:
           path: ~/.cache/deno
           key: deno-${{ hashFiles('deno.lock') }}
           restore-keys: deno-
+      - uses: actions/cache@v4
+        with:
+          path: _dist/bin
+          key: floorp-test-bin-linux-${{ hashFiles('tools/src/defines.ts') }}
+          restore-keys: floorp-test-bin-linux-
 
       - name: Set up virtual display
         run: |
