@@ -48,11 +48,13 @@ export function SsbContainerSelect(
 
   const isDisabled = () => props.disabled?.() === true;
 
-  const handleItemCommand = (userContextId: number) => (event: Event) => {
-    event.stopPropagation();
+  const handleItemCommand = (userContextId: number) => (event?: Event) => {
+    event?.stopPropagation();
 
-    const menuitem = event.currentTarget as XULElement;
-    hideMenuPopup(menuitem);
+    const menuitem = event?.currentTarget as XULElement | undefined;
+    if (menuitem) {
+      hideMenuPopup(menuitem);
+    }
 
     if (userContextId === props.selectedId()) {
       return;

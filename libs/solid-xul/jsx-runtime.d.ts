@@ -64,7 +64,7 @@ export namespace JSX {
     label?: string;
     accesskey?: string;
     oncommand?: string;
-    onCommand?: () => void;
+    onCommand?: (event?: Event) => void;
     value?: string;
   }
 
@@ -76,7 +76,7 @@ export namespace JSX {
     disabled?: boolean;
     command?: string;
     oncommand?: string;
-    onCommand?: () => void;
+    onCommand?: (event?: Event) => void;
     value?: string;
     closemenu?: "none" | "all" | "current" | "parent";
   }
@@ -140,7 +140,7 @@ export namespace JSX {
     accesskey?: string;
     command?: string;
     oncommand?: string;
-    onCommand?: () => void;
+    onCommand?: (event?: Event) => void;
     context?: string;
     image?: string;
     hidden?: boolean;
@@ -152,7 +152,7 @@ export namespace JSX {
     accesskey?: string;
     type?: "menu" | "button";
     oncommand?: string;
-    onCommand?: () => void;
+    onCommand?: (event?: Event) => void;
     context?: string;
     image?: string;
     disabled?: boolean;
