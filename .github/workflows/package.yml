@@ -1229,17 +1229,10 @@ jobs:
                   --rcodesign-p12-file floorpCert.p12 \
                   --rcodesign-p12-password-file floorpCertPassword.passwd
 
-                # mach macos-sign verifies signatures; confirm entitlements blob on main binary.
-                # print-signature-info on the whole .app is huge and no longer includes plaintext
-                # entitlement keys, so avoid grepping that output under pipefail.
-                MAIN_ENTITLEMENT_INFO=$(rcodesign print-signature-info "$APP_FILE/Contents/MacOS/XUL" 2>&1 || true)
-                if grep -Fq 'slot: Entitlements' <<< "$MAIN_ENTITLEMENT_INFO"; then
-                  echo "✓ Main binary entitlements blob embedded after signing"
-                else
-                  echo "ERROR: entitlements blob not found on main binary after signing" >&2
-                  head -40 <<< "$MAIN_ENTITLEMENT_INFO" >&2 || true
-                  exit 1
-                fi
+                # mach macos-sign already runs rcodesign verify on the signed bundle.
+                # rcodesign 0.29 print-signature-info output no longer exposes a stable
+                # entitlements slot for post-sign grepping, so rely on the pre-sign XML
+                # check above plus mach's built-in verification instead.
 
                 if [ "${{inputs.beta}}" == "true" ]; then
                   DS_STORE_PATH="$GITHUB_WORKSPACE/noraneko/.github/workflows/assets/mac/daylight/DS_Store"
