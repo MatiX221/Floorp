@@ -3,8 +3,8 @@
 
 import { getCSSFromConfig } from "../utils/css.ts";
 import {
-  assertEquals,
   assert,
+  assertEquals,
   runTests,
 } from "../../../test/utils/test_harness.ts";
 import type { TFloorpDesignConfigs } from "../type.ts";
@@ -74,8 +74,7 @@ function testFluerialHasUseTabColorAsToolbarColor(): void {
 
 function testFluerialHasStylesOrRaw(): void {
   const result = getCSSFromConfig(makeConfig("fluerial"));
-  const hasChromeStyles =
-    (result.chromeStyles?.length ?? 0) > 0 ||
+  const hasChromeStyles = (result.chromeStyles?.length ?? 0) > 0 ||
     (result.chromeStylesRaw?.length ?? 0) > 0;
   assert(
     hasChromeStyles,
@@ -107,8 +106,8 @@ function testLeptonNoUseTabColorAsToolbarColor(): void {
 
 function testLeptonHasTwoStyleEntries(): void {
   const result = getCSSFromConfig(makeConfig("lepton"));
-  const count =
-    (result.chromeStyles?.length ?? 0) || (result.chromeStylesRaw?.length ?? 0);
+  const count = (result.chromeStyles?.length ?? 0) ||
+    (result.chromeStylesRaw?.length ?? 0);
   assertEquals(
     count,
     3,
@@ -127,8 +126,8 @@ function testPhotonReturnsUserjs(): void {
 
 function testPhotonHasContentStyles(): void {
   const result = getCSSFromConfig(makeConfig("photon"));
-  const hasContentStyles =
-    (result.styles?.length ?? 0) > 0 || (result.stylesRaw?.length ?? 0) > 0;
+  const hasContentStyles = (result.styles?.length ?? 0) > 0 ||
+    (result.stylesRaw?.length ?? 0) > 0;
   assert(
     hasContentStyles,
     "photon should have content styles (styles or stylesRaw)",
@@ -137,8 +136,7 @@ function testPhotonHasContentStyles(): void {
 
 function testPhotonHasChromeStyles(): void {
   const result = getCSSFromConfig(makeConfig("photon"));
-  const hasChromeStyles =
-    (result.chromeStyles?.length ?? 0) > 0 ||
+  const hasChromeStyles = (result.chromeStyles?.length ?? 0) > 0 ||
     (result.chromeStylesRaw?.length ?? 0) > 0;
   assert(
     hasChromeStyles,
@@ -155,12 +153,12 @@ function testProtonfixReturnsUserjs(): void {
   assert(result.userjs !== null, "protonfix should have non-null userjs");
 }
 
-function testProtonfixHasUseTabColorAsToolbarColor(): void {
+function testProtonfixNoUseTabColorAsToolbarColor(): void {
   const result = getCSSFromConfig(makeConfig("protonfix"));
   assertEquals(
     result.useTabColorAsToolbarColor,
-    true,
-    "protonfix should set useTabColorAsToolbarColor to true",
+    undefined,
+    "protonfix should not set useTabColorAsToolbarColor (conflicts with userjs color_like_toolbar=false)",
   );
 }
 
@@ -257,8 +255,8 @@ export async function runAllTests(): Promise<void> {
     // protonfix
     { name: "protonfix returns userjs", fn: testProtonfixReturnsUserjs },
     {
-      name: "protonfix has useTabColorAsToolbarColor",
-      fn: testProtonfixHasUseTabColorAsToolbarColor,
+      name: "protonfix no useTabColorAsToolbarColor",
+      fn: testProtonfixNoUseTabColorAsToolbarColor,
     },
     // proton
     { name: "proton returns null userjs", fn: testProtonReturnsNullUserjs },
@@ -294,8 +292,8 @@ export async function runAllTests(): Promise<void> {
       fn: testUserjsContentNonEmpty,
     },
     {
-      name: "chromeStylesRaw and chromeStyles are mutually exclusive",
-      fn: testChromeStylesMutuallyExclusive,
+      name: "production themes can combine chromeStyles and chromeStylesRaw",
+      fn: testProductionThemesCanCombineChromeStylesAndRaw,
     },
   ]);
 }
@@ -328,11 +326,9 @@ function testPhotonHasBothStyleTypes(): void {
   const result = getCSSFromConfig(makeConfig("photon"));
   // Photon has both chrome styles (chromeStyles/chromeStylesRaw)
   // and content styles (styles/stylesRaw)
-  const hasChromeStyles =
-    (result.chromeStyles?.length ?? 0) > 0 ||
+  const hasChromeStyles = (result.chromeStyles?.length ?? 0) > 0 ||
     (result.chromeStylesRaw?.length ?? 0) > 0;
-  const hasContentStyles =
-    (result.styles?.length ?? 0) > 0 ||
+  const hasContentStyles = (result.styles?.length ?? 0) > 0 ||
     (result.stylesRaw?.length ?? 0) > 0;
 
   assertEquals(
@@ -345,11 +341,9 @@ function testPhotonHasBothStyleTypes(): void {
 function testProtonfixHasBothStyleTypes(): void {
   const result = getCSSFromConfig(makeConfig("protonfix"));
   // Protonfix also has both chrome and content styles
-  const hasChromeStyles =
-    (result.chromeStyles?.length ?? 0) > 0 ||
+  const hasChromeStyles = (result.chromeStyles?.length ?? 0) > 0 ||
     (result.chromeStylesRaw?.length ?? 0) > 0;
-  const hasContentStyles =
-    (result.styles?.length ?? 0) > 0 ||
+  const hasContentStyles = (result.styles?.length ?? 0) > 0 ||
     (result.stylesRaw?.length ?? 0) > 0;
 
   assertEquals(
@@ -374,8 +368,11 @@ function testUserjsContentNonEmpty(): void {
   }
 }
 
-function testChromeStylesMutuallyExclusive(): void {
-  // A theme should not have both chromeStyles and chromeStylesRaw
+function testProductionThemesCanCombineChromeStylesAndRaw(): void {
+  if (import.meta.env.DEV) {
+    return;
+  }
+
   const themes: Array<
     TFloorpDesignConfigs["globalConfigs"]["userInterface"]
   > = ["fluerial", "lepton", "photon", "protonfix"];
@@ -385,10 +382,9 @@ function testChromeStylesMutuallyExclusive(): void {
     const hasChromeStyles = (result.chromeStyles?.length ?? 0) > 0;
     const hasChromeStylesRaw = (result.chromeStylesRaw?.length ?? 0) > 0;
 
-    assertEquals(
-      hasChromeStyles && hasChromeStylesRaw,
-      false,
-      `${theme} should not have both chromeStyles and chromeStylesRaw`,
+    assert(
+      hasChromeStyles || hasChromeStylesRaw,
+      `${theme} should expose chromeStyles and/or chromeStylesRaw in production`,
     );
   }
 }

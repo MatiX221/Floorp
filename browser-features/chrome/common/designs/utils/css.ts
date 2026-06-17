@@ -45,6 +45,11 @@ const getStylePath = (path: string): string => {
   return `chrome://noraneko-skin/content/${path}`;
 };
 
+/** Base URL for theme icon assets (dev uses localhost via Vite designs server) */
+const getIconBasePath = (skin: string): string => {
+  return `${getStylePath(`${skin}/icons`)}`;
+};
+
 /**
  * Get CSS configuration based on the selected UI theme
  */
@@ -69,8 +74,12 @@ export function getCSSFromConfig(
         };
       }
       return {
-        chromeStyles: [getStylePath("fluerial/css/fluerial.css")],
-        chromeStylesRaw: [TAB_COLOR_LIKE_TOOLBAR_CSS, FLUERIAL_TAB_CORNER_CSS],
+        chromeStylesRaw: [
+          fluerialStylesRaw,
+          TAB_COLOR_LIKE_TOOLBAR_CSS,
+          FLUERIAL_TAB_CORNER_CSS,
+        ],
+        iconBasePath: getIconBasePath("fluerial"),
         userjs: null,
         useTabColorAsToolbarColor: true,
       };
@@ -122,7 +131,6 @@ export function getCSSFromConfig(
           stylesRaw: [leptonContentStylesRaw],
           iconBasePath: "http://localhost:5174/lepton/icons",
           userjs: protonfixUserJs,
-          useTabColorAsToolbarColor: true,
         };
       }
       return {
@@ -130,7 +138,6 @@ export function getCSSFromConfig(
         chromeStylesRaw: [navBarBackgroundColorCSS],
         styles: [getStylePath("lepton/css/leptonContent.css")],
         userjs: protonfixUserJs,
-        useTabColorAsToolbarColor: true,
       };
     }
 

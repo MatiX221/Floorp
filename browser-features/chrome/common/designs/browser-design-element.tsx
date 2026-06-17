@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { createEffect, createMemo, onCleanup } from "solid-js";
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js";
 import { applyUserJS } from "./utils/userjs-parser.ts";
 import styleBrowser from "./browser.css?inline";
 import { config } from "./configs.ts";
@@ -131,32 +131,28 @@ export function BrowserDesignElement() {
     });
   });
 
-  // Compute Chrome-only styles (applied via DOM, not AGENT_SHEET)
-  // These styles only affect the browser UI, not web content
-  const chromeStyleContent = createMemo(() => {
-    const { chromeStyles, chromeStylesRaw, iconBasePath } = getCSS();
+  const chromeStyleUrls = createMemo(() => getCSS().chromeStyles ?? []);
 
-    // Development mode: use raw CSS
-    if (chromeStylesRaw?.length) {
-      return chromeStylesRaw
-        .map((css) => replaceIconPaths(css, iconBasePath))
-        .join("\n");
+  // Inline Chrome-only CSS (dev bundles + production supplementary rules)
+  const chromeInlineStyleContent = createMemo(() => {
+    const { chromeStylesRaw, iconBasePath } = getCSS();
+    if (!chromeStylesRaw?.length) {
+      return "";
     }
-
-    // Production mode: we need to load chrome:// URLs
-    // Since we can't directly embed chrome:// URLs in style tags,
-    // we'll use @import for production
-    if (chromeStyles?.length) {
-      return chromeStyles.map((url) => `@import url("${url}");`).join("\n");
-    }
-
-    return "";
+    return chromeStylesRaw
+      .map((css) => replaceIconPaths(css, iconBasePath))
+      .join("\n");
   });
 
   return (
     <>
       <style>{styleBrowser}</style>
-      <style>{chromeStyleContent()}</style>
+      <For each={chromeStyleUrls()}>
+        {(url) => <link rel="stylesheet" href={url} />}
+      </For>
+      <Show when={chromeInlineStyleContent()}>
+        <style>{chromeInlineStyleContent()}</style>
+      </Show>
     </>
   );
 }
