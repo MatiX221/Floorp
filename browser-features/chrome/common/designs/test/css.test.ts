@@ -115,6 +115,26 @@ function testLeptonHasTwoStyleEntries(): void {
   );
 }
 
+function getChromeInlineCss(
+  ui: TFloorpDesignConfigs["globalConfigs"]["userInterface"],
+): string {
+  return getCSSFromConfig(makeConfig(ui)).chromeStylesRaw?.join("\n") ?? "";
+}
+
+function testLeptonPhotonProtonfixNavBarCssIncludesPersonalToolbar(): void {
+  for (const theme of ["lepton", "photon", "protonfix"] as const) {
+    const css = getChromeInlineCss(theme);
+    assert(
+      css.includes("#PersonalToolbar"),
+      `${theme} navBar CSS should style #PersonalToolbar`,
+    );
+    assert(
+      css.includes("--tab-selected-bgcolor"),
+      `${theme} navBar CSS should follow selected tab color`,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests — photon theme
 // ---------------------------------------------------------------------------
@@ -248,6 +268,10 @@ export async function runAllTests(): Promise<void> {
       fn: testLeptonNoUseTabColorAsToolbarColor,
     },
     { name: "lepton has 2 style entries", fn: testLeptonHasTwoStyleEntries },
+    {
+      name: "lepton/photon/protonfix navBar CSS includes PersonalToolbar",
+      fn: testLeptonPhotonProtonfixNavBarCssIncludesPersonalToolbar,
+    },
     // photon
     { name: "photon returns userjs", fn: testPhotonReturnsUserjs },
     { name: "photon has content styles", fn: testPhotonHasContentStyles },

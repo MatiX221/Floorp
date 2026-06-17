@@ -20,11 +20,27 @@ import {
   TAB_COLOR_LIKE_TOOLBAR_CSS,
 } from "./tab-color-like-toolbar.css.ts";
 
-// Additional CSS for Lepton/Photon themes: nav-bar background color fix
+/** Lepton / Photon / ProtonFix: match nav-bar and bookmark bar to selected tab color */
 const navBarBackgroundColorCSS = `
-#nav-bar {
-  background-color: var(--tab-selected-bgcolor, var(--toolbar-bgcolor)) !important;
+#nav-bar,
+#PersonalToolbar {
+  --floorp-chrome-surface-color: var(
+    --tab-selected-bgcolor,
+    var(--toolbar-bgcolor)
+  );
+  background-color: var(--floorp-chrome-surface-color) !important;
   color: var(--toolbar-text-color);
+}
+
+/* Lepton paints PersonalToolbar via background-image; override to follow tab color */
+#PersonalToolbar {
+  background-image: linear-gradient(
+      var(--floorp-chrome-surface-color),
+      var(--floorp-chrome-surface-color)
+    ),
+    var(--lwt-additional-images) !important;
+  background-repeat: repeat-x, var(--lwt-background-tiling);
+  background-position: 0 0, var(--lwt-background-alignment);
 }
 `;
 
