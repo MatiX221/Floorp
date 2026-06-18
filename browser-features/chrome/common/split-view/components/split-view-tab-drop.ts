@@ -27,6 +27,8 @@ import {
   setPersistedGroupLayout,
 } from "../patches/session-restore.js";
 import { applyLayout } from "../layout.js";
+import { forceCleanupDragState } from "../utils/force-cleanup.js";
+
 const TAB_DROP_TYPE = "application/x-moz-tabbrowser-tab";
 const NEW_WINDOW_ZONE_ID = "floorp-new-window-drop-zone";
 
@@ -43,6 +45,16 @@ let logger: ConsoleInstance | null = null;
  * for native tab drags leaving the window.
  */
 let dragLeaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Watchdog: if `data-floorp-tab-dragging` (or any sibling drag attribute)
+ * lingers on tabpanels for more than this duration without a fresh dragover,
+ * we assume the drag's terminal events (dragend/drop) were lost and force a
+ * cleanup. Keep this short enough that users don't notice a stuck state,
+ * but long enough that legitimate pauses in dragover don't trigger it.
+ */
+const STUCK_DRAG_WATCHDOG_MS = 2000;
+let stuckDragWatchdog: ReturnType<typeof setTimeout> | null = null;
 
 const t = (key: string, opts?: Record<string, string>): string =>
   (i18next.t as (k: string, o?: Record<string, string>) => string)(key, opts);
@@ -214,9 +226,13 @@ function onDragOver(event: DragEvent): void {
   dragLeaveTimer = setTimeout(() => {
     if (isTabDragging) {
       hideDropOverlay();
+      // Also fully remove the overlay element so a transparent overlay can
+      // never linger over the content area and absorb clicks if dragend
+      // never fires (Firefox Bugzilla #656164).
+      removeDropOverlay();
       removeNewWindowZone();
     }
-  }, 200);
+  }, 150);
 
   // When over the new window zone, still preventDefault so Firefox's
   // built-in detach-to-window does NOT fire before our drop handler.
@@ -243,6 +259,10 @@ function onDragOver(event: DragEvent): void {
   const tabpanels = getTabpanels();
   if (tabpanels) {
     tabpanels.setAttribute("data-floorp-tab-dragging", "true");
+    // Arm the stuck-drag watchdog: if dragover events stop arriving without
+    // a matching dragend/drop, force a cleanup so the attribute can never
+    // linger and permanently block mouse input on the content area.
+    scheduleStuckDragWatchdog();
   }
 
   if (!isTabDragging) {
@@ -475,15 +495,47 @@ function cleanup(): void {
     clearTimeout(dragLeaveTimer);
     dragLeaveTimer = null;
   }
+  clearStuckDragWatchdog();
   isTabDragging = false;
   draggedTabAtStart = null;
   activeZone = "right";
   removeDropOverlay();
   removeNewWindowZone();
-  // Bug 3: Remove the tab-dragging attribute when drag ends
-  const tabpanels = getTabpanels();
-  if (tabpanels) {
-    tabpanels.removeAttribute("data-floorp-tab-dragging");
+  // Belt-and-suspenders: clear every drag-related attribute and overlay
+  // element that could leak across event races. `dragend` may not fire
+  // reliably (Firefox Bugzilla #656164), so every exit path must guarantee
+  // a full cleanup. `forceCleanupDragState` is idempotent and a no-op when
+  // nothing is leaked.
+  forceCleanupDragState(logger);
+}
+
+/**
+ * Arm (or re-arm) the stuck-drag watchdog. Called on every dragover while
+ * `data-floorp-tab-dragging` is set. If `STUCK_DRAG_WATCHDOG_MS` elapses
+ * without a fresh dragover, dragend, or drop, we treat the drag as lost
+ * and force a cleanup.
+ */
+function scheduleStuckDragWatchdog(): void {
+  if (stuckDragWatchdog) clearTimeout(stuckDragWatchdog);
+  stuckDragWatchdog = setTimeout(() => {
+    stuckDragWatchdog = null;
+    const tabpanels = getTabpanels();
+    const stuck = tabpanels?.hasAttribute("data-floorp-tab-dragging") ??
+      false;
+    if (stuck) {
+      logger?.warn(
+        "[tab-drop] stuck-drag watchdog fired — dragend/drop was lost, " +
+          "forcing cleanup to restore mouse input",
+      );
+      cleanup();
+    }
+  }, STUCK_DRAG_WATCHDOG_MS);
+}
+
+function clearStuckDragWatchdog(): void {
+  if (stuckDragWatchdog) {
+    clearTimeout(stuckDragWatchdog);
+    stuckDragWatchdog = null;
   }
 }
 
@@ -496,6 +548,22 @@ export function initTabDrop(initLogger: ConsoleInstance): void {
   const onEnd = () => onDragEnd();
   const onStart = (e: Event) => onDragStart(e as DragEvent);
   const onLeave = (e: Event) => onDragLeave(e as DragEvent);
+
+  // Safety-net listeners: `dragend`/`drop` can be lost (Firefox Bugzilla
+  // #656164) and leave `data-floorp-tab-dragging` on tabpanels, which
+  // permanently blocks mouse input on the content area. Reaching a mouseup,
+  // a window blur, or a visibility change during an active drag is a strong
+  // signal that the drag is over — force a cleanup in those cases.
+  // `cleanup()` is idempotent and a no-op when nothing is active.
+  const onGlobalMouseUp = (): void => {
+    if (isTabDragging) cleanup();
+  };
+  const onWindowBlur = (): void => {
+    if (isTabDragging) cleanup();
+  };
+  const onVisibilityChange = (): void => {
+    if (document.hidden && isTabDragging) cleanup();
+  };
 
   // Capture split view state on dragstart (before Firefox switches tabs).
   const tabContainer = getGBrowser()?.tabContainer;
@@ -510,12 +578,20 @@ export function initTabDrop(initLogger: ConsoleInstance): void {
   document.addEventListener("dragend", onEnd);
   document.addEventListener("dragleave", onLeave);
 
+  // Global safety nets (capture phase so we see them first).
+  window.addEventListener("mouseup", onGlobalMouseUp, true);
+  window.addEventListener("blur", onWindowBlur, true);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+
   cleanupFns = [
     () => tabContainer?.removeEventListener("dragstart", onStart),
     () => document.removeEventListener("dragover", onOver, true),
     () => document.removeEventListener("drop", onDropFn, true),
     () => document.removeEventListener("dragend", onEnd),
     () => document.removeEventListener("dragleave", onLeave),
+    () => window.removeEventListener("mouseup", onGlobalMouseUp, true),
+    () => window.removeEventListener("blur", onWindowBlur, true),
+    () => document.removeEventListener("visibilitychange", onVisibilityChange),
   ];
 
   logger.debug("[tab-drop] document-level listeners attached (capture phase)");
@@ -526,6 +602,7 @@ export function destroyTabDrop(): void {
   cleanupFns = [];
   removeDropOverlay();
   removeNewWindowZone();
+  clearStuckDragWatchdog();
   cleanup();
   logger = null;
 }
