@@ -503,9 +503,9 @@ function cleanup(): void {
   removeNewWindowZone();
   // Belt-and-suspenders: clear every drag-related attribute and overlay
   // element that could leak across event races. `dragend` may not fire
-  // reliably (Firefox Bugzilla #656164), so every exit path must guarantee
-  // a full cleanup. `forceCleanupDragState` is idempotent and a no-op when
-  // nothing is leaked.
+  // reliably (Firefox Bugzilla #656164 — e.g. when the tab is detached to
+  // a new window), so every exit path must guarantee a full cleanup.
+  // `forceCleanupDragState` is idempotent and a no-op when nothing is leaked.
   forceCleanupDragState(logger);
 }
 
@@ -513,15 +513,16 @@ function cleanup(): void {
  * Arm (or re-arm) the stuck-drag watchdog. Called on every dragover while
  * `data-floorp-tab-dragging` is set. If `STUCK_DRAG_WATCHDOG_MS` elapses
  * without a fresh dragover, dragend, or drop, we treat the drag as lost
- * and force a cleanup.
+ * (the most common cause is detach-to-window, where Firefox never delivers
+ * dragend/drop to this window) and force a cleanup so mouse input on the
+ * content area is restored instead of staying blocked until restart.
  */
 function scheduleStuckDragWatchdog(): void {
   if (stuckDragWatchdog) clearTimeout(stuckDragWatchdog);
   stuckDragWatchdog = setTimeout(() => {
     stuckDragWatchdog = null;
     const tabpanels = getTabpanels();
-    const stuck = tabpanels?.hasAttribute("data-floorp-tab-dragging") ??
-      false;
+    const stuck = tabpanels?.hasAttribute("data-floorp-tab-dragging") ?? false;
     if (stuck) {
       logger?.warn(
         "[tab-drop] stuck-drag watchdog fired — dragend/drop was lost, " +
@@ -552,9 +553,9 @@ export function initTabDrop(initLogger: ConsoleInstance): void {
   // Safety-net listeners: `dragend`/`drop` can be lost (Firefox Bugzilla
   // #656164) and leave `data-floorp-tab-dragging` on tabpanels, which
   // permanently blocks mouse input on the content area. Reaching a mouseup,
-  // a window blur, or a visibility change during an active drag is a strong
-  // signal that the drag is over — force a cleanup in those cases.
-  // `cleanup()` is idempotent and a no-op when nothing is active.
+  // a window blur, a visibility change, or a TabClose during an active drag
+  // is a strong signal that the drag is over — force a cleanup in those
+  // cases. `cleanup()` is idempotent and a no-op when nothing is active.
   const onGlobalMouseUp = (): void => {
     if (isTabDragging) cleanup();
   };
@@ -563,6 +564,24 @@ export function initTabDrop(initLogger: ConsoleInstance): void {
   };
   const onVisibilityChange = (): void => {
     if (document.hidden && isTabDragging) cleanup();
+  };
+  // Detach-to-window: when a tab is dragged out of the window, Firefox
+  // closes the source tab (dispatching TabClose on it) and opens a new
+  // window — but never delivers dragend/drop to this window. This is the
+  // exact race the PR's other safety nets can only approximate (the watchdog
+  // recovers it after a delay); TabClose lets us recover *instantly*. We
+  // only react when the closed tab is the one we captured at dragstart, so
+  // an unrelated tab closing mid-drag does not abort the active drag.
+  const onTabClose = (event: Event): void => {
+    if (!isTabDragging) return;
+    const closingTab = event.target as SplitViewTab | null;
+    if (closingTab && closingTab === draggedTabAtStart) {
+      logger?.warn(
+        "[tab-drop] dragged tab closed mid-drag — assuming detach-to-window, " +
+          "forcing cleanup to restore mouse input",
+      );
+      cleanup();
+    }
   };
 
   // Capture split view state on dragstart (before Firefox switches tabs).
@@ -579,9 +598,10 @@ export function initTabDrop(initLogger: ConsoleInstance): void {
   document.addEventListener("dragleave", onLeave);
 
   // Global safety nets (capture phase so we see them first).
-  window.addEventListener("mouseup", onGlobalMouseUp, true);
-  window.addEventListener("blur", onWindowBlur, true);
+  globalThis.addEventListener("mouseup", onGlobalMouseUp, true);
+  globalThis.addEventListener("blur", onWindowBlur, true);
   document.addEventListener("visibilitychange", onVisibilityChange);
+  globalThis.addEventListener("TabClose", onTabClose);
 
   cleanupFns = [
     () => tabContainer?.removeEventListener("dragstart", onStart),
@@ -589,9 +609,10 @@ export function initTabDrop(initLogger: ConsoleInstance): void {
     () => document.removeEventListener("drop", onDropFn, true),
     () => document.removeEventListener("dragend", onEnd),
     () => document.removeEventListener("dragleave", onLeave),
-    () => window.removeEventListener("mouseup", onGlobalMouseUp, true),
-    () => window.removeEventListener("blur", onWindowBlur, true),
+    () => globalThis.removeEventListener("mouseup", onGlobalMouseUp, true),
+    () => globalThis.removeEventListener("blur", onWindowBlur, true),
     () => document.removeEventListener("visibilitychange", onVisibilityChange),
+    () => globalThis.removeEventListener("TabClose", onTabClose),
   ];
 
   logger.debug("[tab-drop] document-level listeners attached (capture phase)");
