@@ -109,6 +109,7 @@ export function getCSSFromConfig(
         return {
           chromeStylesRaw: [
             leptonChromeStylesRaw,
+            leptonContentStylesRaw,
             LEPTON_COMPAT_CSS,
             navBarBackgroundColorCSS,
           ],

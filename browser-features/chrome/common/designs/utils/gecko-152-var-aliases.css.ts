@@ -91,7 +91,9 @@ export const GECKO_152_RENAMED_VARS: ReadonlyArray<
   ["--arrowpanel-color", "--panel-text-color"],
   ["--arrowpanel-border-color", "--panel-border-color"],
   ["--panel-background", "--panel-background-color"],
-  ["--panel-text-color", "--panel-text-color"],
+  // Note: --panel-text-color was NOT renamed in Gecko 152, so it has no alias
+  // entry — a self-referential `var(--panel-text-color, var(--panel-text-color))`
+  // would be a cyclic no-op.
   ["--panel-dimmed", "--panel-background-color-dimmed"],
   ["--panel-dimmed-further", "--panel-background-color-dimmed-further"],
 ];

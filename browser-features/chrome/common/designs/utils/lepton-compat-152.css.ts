@@ -123,13 +123,15 @@ export const LEPTON_COMPAT_152_CSS = `
 }
 
 /* Built-in theme, no LWT loaded: restore Lepton's light palette.
- * :root:is(:not([lwtheme]), :not(:-moz-lwtheme)) means "no theme active". */
-:root:is(:not([lwtheme]), :not(:-moz-lwtheme)) {
+ * Chain both negations on :root (AND) so the rule only applies when NO
+ * theme signal is present — `:is(:not(...), :not(...))` was OR logic and
+ * matched even when one signal was set. */
+:root:not([lwtheme]):not(:-moz-lwtheme) {
   --lwt-accent-color: var(--lepton-compat-accent-light) !important;
   --toolbar-bgcolor: var(--lepton-compat-toolbar-light) !important;
 }
 @media (prefers-color-scheme: dark) {
-  :root:is(:not([lwtheme]), :not(:-moz-lwtheme)) {
+  :root:not([lwtheme]):not(:-moz-lwtheme) {
     --lwt-accent-color: var(--lepton-compat-accent-dark) !important;
     --toolbar-bgcolor: var(--lepton-compat-toolbar-dark) !important;
   }
@@ -189,7 +191,7 @@ dialog {
  * Lepton ties --panel-background to --arrowpanel-background which it also
  * overrides via the broken detection path. Pin it to the chrome surface
  * token so panels match the toolbar. */
-:root:is(:not([lwtheme]), :not(:-moz-lwtheme)) {
+:root:not([lwtheme]):not(:-moz-lwtheme) {
   --arrowpanel-background: var(--toolbar-bgcolor, -moz-dialog) !important;
 }
 `;
