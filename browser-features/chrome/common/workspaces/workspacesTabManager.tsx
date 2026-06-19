@@ -34,15 +34,6 @@ interface TabEvent extends Event {
 export class WorkspacesTabManager {
   dataManagerCtx: WorkspacesDataManager;
   iconCtx: WorkspaceIcons;
-  // Track recently opened tabs and per-workspace open timestamps to detect
-  // "auto-created replacement tab" right after last-tab close.
-  private recentOpenedAtByTab = new WeakMap<XULElement, number>();
-  private recentOpenedAtPerWorkspace = new Map<TWorkspaceID, number>();
-  // Timestamp (Date.now()) of when the current handleTabClose invocation
-  // started. Used to distinguish tabs created by reopen/container-switch
-  // operations (created BEFORE the close) from Firefox auto-replacement tabs
-  // (created DURING the close). Fixes #2193.
-  private tabCloseStartTime = 0;
   // When true, handleTabClose skips its workspace-empty logic. Used during
   // bulk tab removal (workspace deletion) so that closing tabs one-by-one
   // does not interfere with the deletion flow (fixes #2247).
@@ -213,8 +204,6 @@ export class WorkspacesTabManager {
     // Skip workspace-empty logic when bulk-removing tabs (e.g. workspace deletion)
     if (this.suppressTabCloseHandling) return;
 
-    this.tabCloseStartTime = Date.now();
-
     const tab = event.target as XULElement;
     let workspaceId = this.getWorkspaceIdFromAttribute(tab);
 
@@ -232,6 +221,7 @@ export class WorkspacesTabManager {
     const currentWorkspaceId = this.dataManagerCtx.getSelectedWorkspaceID();
     const isCurrentWorkspace = workspaceId === currentWorkspaceId;
     const allTabs = globalThis.gBrowser.tabs as XULElement[];
+
     const resolveWorkspaceIdForClose = (
       targetTab: XULElement,
     ): TWorkspaceID => {
@@ -241,45 +231,20 @@ export class WorkspacesTabManager {
       return t !== tab && resolveWorkspaceIdForClose(t) === workspaceId;
     });
 
-    const now = Date.now();
     const validWorkspaceTabs = workspaceTabs.filter((t) => {
-      const createdAt = this.recentOpenedAtByTab.get(
-        t as unknown as XULElement,
-      );
-      // If a tab was created extremely recently (< 500ms), it's likely the
-      // auto-generated replacement tab from Firefox's closeWindowWithLastTab=false behavior.
-      // We should ignore it when checking if the workspace is empty.
-      if (createdAt && now - createdAt < 500) {
-        // If the tab was created BEFORE this handleTabClose started, it's from a
-        // reopen/container-switch operation (Floorp code or extension), not a
-        // Firefox auto-replacement tab. Always keep it. Fixes #2193.
-        if (createdAt <= this.tabCloseStartTime) {
-          return true;
-        }
-        try {
-          const browser = globalThis.gBrowser.getBrowserForTab(
-            t as unknown as XULElement,
-          );
-          const url = browser?.currentURI?.spec;
-          // If the tab has a valid URL that is not a blank/newtab page,
-          // it is likely a user-created tab (e.g. "Open Link in New Tab"),
-          // so we should NOT ignore it.
-          const isBlankOrNewTab = !url ||
-            url === "about:blank" ||
-            url === "about:newtab" ||
-            url === "about:home";
-          if (!isBlankOrNewTab) {
-            return true;
-          }
-        } catch (e) {
-          console.error(
-            "WorkspacesTabManager: error checking tab URL in filter",
-            e,
-          );
-        }
-        return false;
-      }
-      return true;
+      // Firefox auto-creates a "replacement" tab (blank page in the default
+      // container) right before firing TabClose when
+      // browser.tabs.closeWindowWithLastTab=false. Such tabs have no user
+      // value and must not prevent the "workspace becoming empty" detection.
+      // Earlier code tried to identify them by creation timestamp, but that is
+      // unreliable: Firefox creates the replacement *before* TabClose fires,
+      // and a replacement left over from a previous close also looks "old".
+      // Instead, identify replacements by their stable intrinsic features:
+      // blank/newtab URL + default container + not pinned.
+      // Container-switch / reopen tabs (fixes #2193) are created in the
+      // workspace's *target* container, so they keep userContextId > 0 and are
+      // never misclassified here.
+      return !this.isAutoReplacementTab(t as unknown as XULElement);
     });
 
     if (isCurrentWorkspace && validWorkspaceTabs.length === 0) {
@@ -385,17 +350,20 @@ export class WorkspacesTabManager {
         }
 
         // exitOnLastTabClose is true. Before closing, verify there truly are no
-        // remaining tabs — the 500ms filter above may have excluded recently-created
-        // user tabs, which would cause a premature close (#2152).
+        // remaining USER tabs. Firefox's auto-replacement tab (blank page in the
+        // default container) does not count — it should not prevent the quit.
+        // Real user tabs (e.g. one the user just opened) must keep the window
+        // alive, which is what prevents a premature close (#2152).
         const remainingTabs = (globalThis.gBrowser.tabs as XULElement[])
-          .filter((t) => t !== tab);
+          .filter((t) => t !== tab)
+          .filter((t) => !this.isAutoReplacementTab(t));
         if (remainingTabs.length === 0) {
           Services.prefs.setBoolPref(WORKSPACE_PENDING_EXIT_PREF_NAME, true);
           setTimeout(() => {
             globalThis.close();
           }, 0);
         } else {
-          // Remaining tabs exist (e.g., user just opened a new tab).
+          // Remaining user tabs exist (e.g., user just opened a new tab).
           // Assign the first one to the workspace instead of closing.
           const newTab = remainingTabs[0];
           this.setWorkspaceIdToAttribute(newTab, workspaceId);
@@ -409,14 +377,11 @@ export class WorkspacesTabManager {
   private handleTabOpen = (event: Event) => {
     try {
       const tab = (event as CustomEvent).target as XULElement;
-      const now = Date.now();
-      this.recentOpenedAtByTab.set(tab, now);
       const wsId = this.getWorkspaceIdFromAttribute(tab) ??
         this.dataManagerCtx.getSelectedWorkspaceID();
       if (!this.getWorkspaceIdFromAttribute(tab)) {
         this.setWorkspaceIdToAttribute(tab, wsId);
       }
-      this.recentOpenedAtPerWorkspace.set(wsId, now);
     } catch {
       // ignore tab-open handler error
     }
@@ -527,6 +492,58 @@ export class WorkspacesTabManager {
    */
   setWorkspaceIdToAttribute(tab: XULElement, workspaceId: TWorkspaceID) {
     tab.setAttribute(WORKSPACE_TAB_ATTRIBUTION_ID, workspaceId);
+  }
+
+  /**
+   * Detect whether a tab is an auto-created Firefox "replacement" tab.
+   *
+   * When `browser.tabs.closeWindowWithLastTab` is forced to false (which this
+   * feature does), Firefox spawns a blank replacement tab *before* firing
+   * TabClose to keep the window from going empty. Such tabs have no user value
+   * and must not block the "workspace becoming empty" detection.
+   *
+   * Replacements are identified by stable intrinsic features rather than by
+   * creation timestamp (which proved unreliable — Firefox creates the
+   * replacement before TabClose fires, and one left over from a previous close
+   * looks old). Specifically: blank/newtab URL + default container (no
+   * userContextId) + not pinned.
+   *
+   * Tabs created by container-switch / reopen logic (#2193) and "Open Link in
+   * New Tab" always carry a real userContextId or a non-blank URL, so they are
+   * never misclassified as replacements here.
+   */
+  private isAutoReplacementTab(tab: XULElement): boolean {
+    try {
+      // Pinned tabs are never auto-replacements.
+      if (tab.getAttribute("pinned") === "true") return false;
+
+      // Replacement tabs are always created in the default container.
+      // Any non-zero userContextId means it is a user/container tab.
+      const userContextId = Number.parseInt(
+        tab.getAttribute("usercontextid") || "0",
+        10,
+      );
+      if (userContextId > 0) return false;
+
+      const browser = globalThis.gBrowser.getBrowserForTab(
+        tab as unknown as XULElement,
+      );
+      const url = browser?.currentURI?.spec || "";
+      // Replacement tabs are blank / newtab / home pages.
+      const isBlankOrNewTab = !url ||
+        url === "about:blank" ||
+        url === "about:newtab" ||
+        url === "about:home";
+      return isBlankOrNewTab;
+    } catch (e) {
+      console.error(
+        "WorkspacesTabManager: error checking if tab is auto-replacement",
+        e,
+      );
+      // On error, assume NOT a replacement so we never accidentally treat a
+      // real user tab as disposable.
+      return false;
+    }
   }
 
   /**
