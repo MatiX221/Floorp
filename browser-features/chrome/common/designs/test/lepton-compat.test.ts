@@ -136,10 +136,21 @@ function testRenamedVarsTableIsCanonical(): void {
     ["--arrowpanel-border-color", "--panel-border-color"],
     ["--panel-background", "--panel-background-color"],
   ];
-  assertEquals(
-    [...GECKO_152_RENAMED_VARS].sort((a, b) => a[0].localeCompare(b[0])),
-    expected.sort((a, b) => a[0].localeCompare(b[0])),
-    "GECKO_152_RENAMED_VARS must match the 151->152 evidence table exactly",
+  // NOTE: the colocated test harness's assertEquals uses reference equality
+  // (===), which can never succeed for two independently-built arrays. Compare
+  // the canonical (sorted) serializations instead.
+  const sortKey = (a: readonly [string, string], b: readonly [string, string]) =>
+    a[0].localeCompare(b[0]);
+  const actualJson = JSON.stringify(
+    [...GECKO_152_RENAMED_VARS].sort(sortKey),
+  );
+  const expectedJson = JSON.stringify(
+    expected.sort(sortKey),
+  );
+  assert(
+    actualJson === expectedJson,
+    "GECKO_152_RENAMED_VARS must match the 151->152 evidence table exactly " +
+      `(expected: ${expectedJson}, actual: ${actualJson})`,
   );
 }
 

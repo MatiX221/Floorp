@@ -71,7 +71,7 @@ import {
  * Therefore the chain prefers `--toolbar-bgcolor` first and only falls back to
  * `--toolbar-background-color` when the legacy token is unset.
  */
-const navBarBackgroundColorCSS = `
+export const navBarBackgroundColorCSS = `
 /* No theme loaded (default-theme, built-in Light/Dark, etc.): paint nav-bar /
  * PersonalToolbar with the selected tab color. Lepton's color_like_toolbar
  * unsets --tab-selected-bgcolor, so this resolves to --toolbar-bgcolor -- the
