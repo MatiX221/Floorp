@@ -429,7 +429,7 @@ export class WorkspacesTabManager {
       selectedTab &&
       !selectedTab.hasAttribute(WORKSPACE_LAST_SHOW_ID) &&
       selectedTab.getAttribute(WORKSPACE_TAB_ATTRIBUTION_ID) ===
-        currentWorkspaceId
+      currentWorkspaceId
     ) {
       const lastShowWorkspaceTabs = document?.querySelectorAll(
         `[${WORKSPACE_LAST_SHOW_ID}="${currentWorkspaceId}"]`,
@@ -467,10 +467,30 @@ export class WorkspacesTabManager {
     // Hide tab groups that have no visible tabs, show those that do
     const tabGroups = globalThis.gBrowser.tabGroups;
     for (const group of tabGroups) {
-      const hasVisibleTabInGroup = (group.tabs as Array<XULElement>).some(
-        (tab) => this.getWorkspaceIdFromAttribute(tab) === currentWorkspaceId,
-      );
+      const hasVisibleTabInGroup = (group.tabs as Array<XULElement>)
+        .slice(0, 10)
+        .some((tab) => this.getWorkspaceIdFromAttribute(tab) === currentWorkspaceId);
       group.style.display = hasVisibleTabInGroup ? "" : "none";
+    }
+
+    // Hide split view wrappers that have no visible tabs, show those that do
+    const splitViewWrappers = document.querySelectorAll(
+      "tab-split-view-wrapper",
+    );
+    for (const wrapper of splitViewWrappers) {
+      const children = Array.from(wrapper.children) as Element[];
+      const hasVisibleTabInWrapper = children.some(
+        (child) => {
+          if (child.tagName !== "tab") return false;
+          return (
+            this.getWorkspaceIdFromAttribute(child as XULElement) ===
+            currentWorkspaceId
+          );
+        },
+      );
+      (wrapper as HTMLElement).style.display = hasVisibleTabInWrapper
+        ? ""
+        : "none";
     }
   }
 
@@ -543,8 +563,8 @@ export class WorkspacesTabManager {
         const targetWorkspaceId = defaultId !== workspaceId
           ? defaultId
           : fallbackWorkspaceId && fallbackWorkspaceId !== workspaceId
-          ? fallbackWorkspaceId
-          : null;
+            ? fallbackWorkspaceId
+            : null;
 
         if (targetWorkspaceId) {
           const defaultTabs = document?.querySelectorAll(
@@ -636,7 +656,7 @@ export class WorkspacesTabManager {
       if (
         currentlySelectedTab &&
         this.getWorkspaceIdFromAttribute(currentlySelectedTab) ===
-          prevWorkspaceId
+        prevWorkspaceId
       ) {
         currentlySelectedTab.setAttribute(
           WORKSPACE_LAST_SHOW_ID,
