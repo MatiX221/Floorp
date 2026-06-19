@@ -124,7 +124,7 @@ export const LEPTON_COMPAT_152_CSS = `
 
 /* Built-in theme, no LWT loaded: restore Lepton's light palette.
  * Chain both negations on :root (AND) so the rule only applies when NO
- * theme signal is present — `:is(:not(...), :not(...))` was OR logic and
+ * theme signal is present — ':is(:not(...), :not(...))' was OR logic and
  * matched even when one signal was set. */
 :root:not([lwtheme]):not(:-moz-lwtheme) {
   --lwt-accent-color: var(--lepton-compat-accent-light) !important;
