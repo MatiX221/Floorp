@@ -81,9 +81,14 @@ export class PanelSidebarElem {
 
   private setVerticalTabBgColor() {
     const newValue = Services.prefs.getBoolPref("sidebar.verticalTabs");
+    // Gecko 152 (Project Nova) renamed --toolbox-bgcolor -> --toolbox-background-color
+    // and --toolbar-bgcolor -> --toolbar-background-color. Use the new names with a
+    // fallback to the legacy names so the build still resolves on Gecko < 152.
     this.documentElement?.style.setProperty(
       "--panel-sidebar-background-color",
-      newValue ? "var(--toolbox-bgcolor)" : "var(--toolbar-bgcolor)",
+      newValue
+        ? "var(--toolbox-background-color, var(--toolbox-bgcolor, var(--toolbar-background-color, var(--toolbar-bgcolor))))"
+        : "var(--toolbar-background-color, var(--toolbar-bgcolor))",
     );
   }
 

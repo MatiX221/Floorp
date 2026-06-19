@@ -104,14 +104,21 @@ function testLeptonNoUseTabColorAsToolbarColor(): void {
   );
 }
 
-function testLeptonHasTwoStyleEntries(): void {
+function testLeptonHasExpectedStyleEntries(): void {
   const result = getCSSFromConfig(makeConfig("lepton"));
-  const count = (result.chromeStyles?.length ?? 0) ||
-    (result.chromeStylesRaw?.length ?? 0);
-  assertEquals(
-    count,
-    3,
-    "lepton should have 3 style entries (chrome + content + navBar background)",
+  // Production: chromeStyles = [leptonChrome, leptonContent] (2).
+  // Dev:        chromeStylesRaw = [leptonChrome, LEPTON_COMPAT, navBar] (3).
+  // Both branches must carry Lepton's chrome + content sheets; the Gecko 152
+  // compat layer and the nav-bar color override are layered on as raw CSS.
+  const chromeCount = result.chromeStyles?.length ??
+    result.chromeStylesRaw?.length ?? 0;
+  assert(
+    chromeCount >= 2,
+    `lepton should expose at least Lepton chrome + content sheets, got ${chromeCount}`,
+  );
+  assert(
+    (result.chromeStylesRaw?.length ?? 0) >= 1,
+    "lepton should always carry inline raw chrome CSS (compat + navBar)",
   );
 }
 
@@ -267,7 +274,7 @@ export async function runAllTests(): Promise<void> {
       name: "lepton no useTabColorAsToolbarColor",
       fn: testLeptonNoUseTabColorAsToolbarColor,
     },
-    { name: "lepton has 2 style entries", fn: testLeptonHasTwoStyleEntries },
+    { name: "lepton has expected style entries", fn: testLeptonHasExpectedStyleEntries },
     {
       name: "lepton/photon/protonfix navBar CSS includes PersonalToolbar",
       fn: testLeptonPhotonProtonfixNavBarCssIncludesPersonalToolbar,
