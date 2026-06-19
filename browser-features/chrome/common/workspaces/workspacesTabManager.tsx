@@ -468,7 +468,6 @@ export class WorkspacesTabManager {
     const tabGroups = globalThis.gBrowser.tabGroups;
     for (const group of tabGroups) {
       const hasVisibleTabInGroup = (group.tabs as Array<XULElement>)
-        .slice(0, 10)
         .some((tab) => this.getWorkspaceIdFromAttribute(tab) === currentWorkspaceId);
       group.style.display = hasVisibleTabInGroup ? "" : "none";
     }
