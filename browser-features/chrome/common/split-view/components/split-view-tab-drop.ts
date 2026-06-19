@@ -124,6 +124,21 @@ function isOverContentArea(event: DragEvent): boolean {
   );
 }
 
+/**
+ * Check if the drag event targets an element inside a popup/panel that floats
+ * over the content area (e.g. the "List all tabs" menu, app menu, context
+ * menus). Such panels host their own drag/drop handling, so we must NOT
+ * intercept their events — otherwise tab reordering inside the panel breaks
+ * (Issue #2490). These panels visually overlap the content area, so
+ * `isOverContentArea` returns true, but `event.target` is the panel's child
+ * element, which we use to tell the two cases apart.
+ */
+function isEventTargetInsidePanel(event: DragEvent): boolean {
+  const target = event.target;
+  if (!(target instanceof Element)) return false;
+  return !!target.closest("panel, panelmultiview, panelview, menupopup");
+}
+
 // --- New window drop zone ---
 
 function getOrCreateNewWindowZone(): HTMLElement | null {
@@ -251,6 +266,16 @@ function onDragOver(event: DragEvent): void {
     return;
   }
 
+  // Don't claim the drop target when the drag is actually over a floating
+  // panel (e.g. the "List all tabs" menu). Such panels handle their own
+  // drag/drop and visually overlap the content area, so without this guard
+  // our capture-phase preventDefault/stopPropagation would swallow their drop
+  // events and break tab reordering inside them (Issue #2490).
+  if (isEventTargetInsidePanel(event)) {
+    hideDropOverlay();
+    return;
+  }
+
   // Prevent default to claim the drop target (prevents detach-to-window)
   event.preventDefault();
   event.dataTransfer!.dropEffect = "move";
@@ -295,6 +320,11 @@ function onDrop(event: DragEvent): void {
   if (isEventInsideNewWindowZone(event)) return;
 
   if (!isOverContentArea(event)) return;
+
+  // Don't intercept drops that target a floating panel (e.g. the "List all
+  // tabs" menu) over the content area — let the panel's own drop handler run
+  // so tabs can be reordered inside it (Issue #2490).
+  if (isEventTargetInsidePanel(event)) return;
 
   event.preventDefault();
   event.stopPropagation();
