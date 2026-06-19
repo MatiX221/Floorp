@@ -32,6 +32,7 @@ export class TabDragDropManager {
   private originalOnDragOver: ((event: DragEvent) => void) | undefined | null =
     null;
   private dropEventListener: ((e: Event) => void) | null = null;
+  private dragEndEventListener: ((e: Event) => void) | null = null;
 
   constructor(
     private readonly resolveTabsContainer: () => XULElement | null,
@@ -98,6 +99,12 @@ export class TabDragDropManager {
         }
       }
     });
+
+    this.dragEndEventListener = () => {
+      this.resetState();
+      this.draggedTabIndex = null;
+    };
+    tabContainer.addEventListener("dragend", this.dragEndEventListener);
   }
 
   uninstall(): void {
@@ -126,6 +133,12 @@ export class TabDragDropManager {
       this.dropEventListener = null;
     }
 
+    // Remove dragend event listener
+    if (this.dragEndEventListener) {
+      tabContainer.removeEventListener("dragend", this.dragEndEventListener);
+      this.dragEndEventListener = null;
+    }
+
     // Reset state
     this.resetState();
     this.listenersActive = false;
@@ -141,7 +154,8 @@ export class TabDragDropManager {
       target = target.parentElement!;
     }
 
-    const tab = (target as Element)?.closest("tab") ||
+    const tab =
+      (target as Element)?.closest("tab") ||
       (target as Element)?.closest("tab-group");
     const selectedTab = gBrowser.selectedTab;
 
@@ -210,17 +224,18 @@ export class TabDragDropManager {
         tabs,
         tab.querySelector("tab:first-of-type"),
       );
-      const groupEnd = Array.prototype.indexOf.call(
-        tabs,
-        tab.querySelector("tab:last-of-type"),
-      ) + 1;
+      const groupEnd =
+        Array.prototype.indexOf.call(
+          tabs,
+          tab.querySelector("tab:last-of-type"),
+        ) + 1;
       this.positionInGroup = groupEnd - groupStart;
       dropIndex = groupEnd;
     } else if (tab.parentElement?.nodeName === "tab-group") {
       this.groupToInsertTo = tab.parentElement as unknown as XULElement;
       const groupStart = tab.parentElement.querySelector("tab:first-of-type");
-      this.positionInGroup = dropIndex -
-        Array.prototype.indexOf.call(tabs, groupStart);
+      this.positionInGroup =
+        dropIndex - Array.prototype.indexOf.call(tabs, groupStart);
     } else {
       this.groupToInsertTo = null;
       this.positionInGroup = null;
@@ -415,16 +430,16 @@ export class TabDragDropManager {
       ) {
         if (
           PrivateBrowsingUtils.isWindowPrivate(window) !==
-            PrivateBrowsingUtils.isWindowPrivate(
-              sourceNode.ownerGlobal as unknown as FirefoxWindow,
-            )
+          PrivateBrowsingUtils.isWindowPrivate(
+            sourceNode.ownerGlobal as unknown as FirefoxWindow,
+          )
         ) {
           return "none";
         }
 
         if (
           window.gMultiProcessBrowser !==
-            sourceNode.ownerGlobal.gMultiProcessBrowser
+          sourceNode.ownerGlobal.gMultiProcessBrowser
         ) {
           return "none";
         }
@@ -458,9 +473,8 @@ export class TabDragDropManager {
         if (tabInGroupToMoveTo) {
           gBrowser.moveTabBefore(t, tabInGroupToMoveTo as XULElement);
         } else {
-          const lastTab = this.groupToInsertTo.querySelector(
-            "tab:last-of-type",
-          );
+          const lastTab =
+            this.groupToInsertTo.querySelector("tab:last-of-type");
           if (lastTab) {
             gBrowser.moveTabAfter(t, lastTab as XULElement);
           }
