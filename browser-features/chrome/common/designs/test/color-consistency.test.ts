@@ -42,7 +42,11 @@
  * good-state distributions.
  */
 
-import { assert, runTests, type TestCase } from "../../../test/utils/test_harness.ts";
+import {
+  assert,
+  runTests,
+  type TestCase,
+} from "../../../test/utils/test_harness.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -274,8 +278,11 @@ function getActiveDesignFromPref(): DesignName | null {
     };
     const ui = parsed?.globalConfigs?.userInterface;
     if (
-      ui === "fluerial" || ui === "lepton" || ui === "photon" ||
-      ui === "protonfix" || ui === "proton"
+      ui === "fluerial" ||
+      ui === "lepton" ||
+      ui === "photon" ||
+      ui === "protonfix" ||
+      ui === "proton"
     ) {
       return ui;
     }
@@ -330,31 +337,35 @@ async function setActiveDesign(name: DesignName): Promise<boolean> {
 
 /**
  * Force light or dark scheme via `ui.systemUsesDarkTheme`. Returns whether the
- * scheme actually responds (detected by the root `--toolbar-bgcolor`
- * resolving to a non-empty value after the flip). When the pref has no
- * observable effect this returns false so callers can skip the corresponding
- * case instead of failing flakily.
+ * scheme actually responds (detected by `#nav-bar` resolving to a
+ * non-transparent computed background color after the flip). When the pref
+ * has no observable effect this returns false so callers can skip the
+ * corresponding case instead of failing flakily.
+ *
+ * NOTE: we intentionally read the **computed** background-color of `#nav-bar`
+ * rather than the **specified** value of `--toolbar-bgcolor` on `:root`.
+ * The Gecko 152 alias sheet sets `--toolbar-bgcolor:
+ * var(--toolbar-background-color)` on `:root`; `getComputedStyle` returns the
+ * raw specified string `var(--toolbar-background-color)` which is non-empty
+ * even when `--toolbar-background-color` itself is undefined (Gecko < 152).
+ * Reading the resolved `background-color` on an actual element avoids this
+ * false positive.
  */
 async function setSystemDark(isDark: boolean): Promise<boolean> {
-  const root = document.documentElement;
-  const sampleVar = (): string => {
-    if (!root) return "";
-    const style = globalThis.getComputedStyle(root);
-    if (!style) return "";
-    return style.getPropertyValue("--toolbar-bgcolor").trim();
-  };
-
   try {
     Services.prefs.setIntPref("ui.systemUsesDarkTheme", isDark ? 1 : 0);
   } catch {
     return false;
   }
 
-  // Give the media-query-driven compat layer time to re-resolve.
-  await waitForColorStable(() => readBgColor("#nav-bar"), 4000, 80);
-
-  // Best-effort confirmation: the variable should now resolve to a value.
-  return sampleVar() !== "";
+  // Give the media-query-driven compat layer time to re-resolve, then
+  // check that the nav-bar actually painted a non-transparent background.
+  const stable = await waitForColorStable(
+    () => readBgColor("#nav-bar"),
+    4000,
+    80,
+  );
+  return stable !== null;
 }
 
 // ---------------------------------------------------------------------------
@@ -367,9 +378,10 @@ interface SurfaceReadings {
 }
 
 function readAllSurfaces(): SurfaceReadings {
-  const surfaces = SURFACE_ELEMENTS.map(
-    ([selector, label]) => ({ label, color: readBgColor(selector) }),
-  );
+  const surfaces = SURFACE_ELEMENTS.map(([selector, label]) => ({
+    label,
+    color: readBgColor(selector),
+  }));
   return { surfaces, selectedTab: getSelectedTabBgColor() };
 }
 
