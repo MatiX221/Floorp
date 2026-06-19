@@ -41,39 +41,62 @@ import {
  * bar "float" off the toolbar in the theme's lighter tab color — the bug
  * reported on Issue #2489. So:
  *
- *   - With NO theme loaded (`:not([lwtheme]):not(:-moz-lwtheme)`): Lepton's
- *     own `userChrome.tab.color_like_toolbar` aligns the tab to the toolbar,
- *     so reading `--tab-selected-bgcolor` then falling back to the toolbar
- *     gives the intended Lepton "one surface" look.
- *   - With an LWT loaded: respect the theme's own toolbar color instead of the
- *     tab color, so the bar stays anchored to the toolbar the author drew.
+ *   - Default / built-in themes (default-theme, compact-light, compact-dark):
+ *     Firefox does NOT set `[lwtheme]` for these, so they fall through to the
+ *     "no theme" branch and are painted with the selected tab color. Lepton's
+ *     own `userChrome.tab.color_like_toolbar` aligns the tab to the toolbar
+ *     here, so this reads as the intended Lepton "one surface" look.
+ *   - Third-party LWTs (community colorways, add-on themes): these DO set the
+ *     `[lwtheme]` attribute. We respect the theme's own toolbar color instead
+ *     of the tab color, so the bar stays anchored to the toolbar the author
+ *     drew and does not "float".
  *
- * The surface color prefers the Gecko 152 name (`--toolbar-background-color`)
- * and falls back to the legacy `--toolbar-bgcolor` that older code still sets.
+ * Selector note: we branch on the `[lwtheme]` ATTRIBUTE only, never on the
+ * `:-moz-lwtheme` pseudo-class. Gecko 152 silently drops any selector that
+ * places `:-moz-lwtheme` inside `:not()`, which previously invalidated the
+ * whole "no theme" rule and left built-in themes unstyled. `[lwtheme]` is the
+ * same attribute Firefox itself sets for LWTs, so it is both reliable and
+ * sufficient.
+ *
+ * Surface color fallback ordering (important): on Gecko 152 the legacy
+ * `--toolbar-bgcolor` and the new `--toolbar-background-color` are NOT
+ * guaranteed to hold the same value. Firefox 152 still paints the selected
+ * `.tab-background` from the legacy `--toolbar-bgcolor` /
+ * `--toolbar-non-lwt-bgcolor`, while `--toolbar-background-color` is the
+ * 152-introduced toolbar token that can diverge (e.g. default-theme dark:
+ * `--toolbar-bgcolor` = `#171717` but `--toolbar-background-color` =
+ * `rgb(43,42,51)`). Because Lepton's `color_like_toolbar` aligns the selected
+ * tab to `--toolbar-bgcolor` (it unsets `--tab-selected-bgcolor`), the nav-bar
+ * must follow the SAME token to stay visually flush with the selected tab.
+ * Therefore the chain prefers `--toolbar-bgcolor` first and only falls back to
+ * `--toolbar-background-color` when the legacy token is unset.
  */
 const navBarBackgroundColorCSS = `
-/* No theme: paint nav-bar / PersonalToolbar with the selected tab color
- * (Lepton's color_like_toolbar makes the tab track the toolbar here, so this
- * is equivalent to the toolbar color while still picking up any per-tab
- * customization). */
-:root:not([lwtheme]):not(:-moz-lwtheme) #nav-bar,
-:root:not([lwtheme]):not(:-moz-lwtheme) #PersonalToolbar {
+/* No theme loaded (default-theme, built-in Light/Dark, etc.): paint nav-bar /
+ * PersonalToolbar with the selected tab color. Lepton's color_like_toolbar
+ * unsets --tab-selected-bgcolor, so this resolves to --toolbar-bgcolor -- the
+ * exact token that paints the selected .tab-background -- keeping the bars
+ * flush with the active tab. */
+:root:not([lwtheme]) #nav-bar,
+:root:not([lwtheme]) #PersonalToolbar {
   --floorp-chrome-surface-color: var(
     --tab-selected-bgcolor,
-    var(--toolbar-background-color, var(--toolbar-bgcolor))
+    var(--toolbar-bgcolor, var(--toolbar-background-color))
   );
   background-color: var(--floorp-chrome-surface-color) !important;
   color: var(--toolbar-text-color);
 }
 
-/* LWT loaded: keep nav-bar / PersonalToolbar on the toolbar surface color so
- * the bar does not float off the toolbar in the theme's (often lighter)
- * selected-tab color. */
-:root:is(:-moz-lwtheme, [lwtheme]) #nav-bar,
-:root:is(:-moz-lwtheme, [lwtheme]) #PersonalToolbar {
+/* Third-party LWT loaded ([lwtheme] is set): keep nav-bar / PersonalToolbar on
+ * the toolbar surface color so the bar does not float off the toolbar in the
+ * theme's (often lighter) selected-tab color. --toolbar-bgcolor is preferred
+ * because the LWT sets it to its own toolbar color, which is what the selected
+ * tab tracks under LWT as well. */
+:root[lwtheme] #nav-bar,
+:root[lwtheme] #PersonalToolbar {
   --floorp-chrome-surface-color: var(
-    --toolbar-background-color,
-    var(--toolbar-bgcolor)
+    --toolbar-bgcolor,
+    var(--toolbar-background-color)
   );
   background-color: var(--floorp-chrome-surface-color) !important;
   color: var(--toolbar-text-color);

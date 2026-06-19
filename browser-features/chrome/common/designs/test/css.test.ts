@@ -147,38 +147,106 @@ function testLeptonPhotonProtonfixNavBarCssIncludesPersonalToolbar(): void {
  * PersonalToolbar must follow the TOOLBAR color, not the (often lighter)
  * selected-tab color — otherwise the bar "floats" off the toolbar. The
  * navBar CSS must therefore branch on the LWT signal.
+ *
+ * The signal is the `[lwtheme]` ATTRIBUTE only. Gecko 152 silently drops any
+ * selector that places the `:-moz-lwtheme` pseudo-class inside `:not()` —
+ * which previously invalidated the entire no-theme rule and left the default
+ * and built-in (compact-light / compact-dark) themes unstyled, because those
+ * built-in themes do not set `[lwtheme]` at all. Only third-party LWTs
+ * (community colorways, add-on themes) set `[lwtheme]`.
  */
 function testNavBarCssIsLwtAware(): void {
   for (const theme of ["lepton", "photon", "protonfix"] as const) {
     const css = getChromeInlineCss(theme);
-    // The LWT case must scope the nav-bar/PersonalToolbar to the toolbar
-    // surface color, not the tab color.
+
+    // The no-theme branch must use the [lwtheme] attribute, and must NOT place
+    // :-moz-lwtheme inside :not() (Gecko 152 drops such rules entirely).
     assert(
-      /:root:is\(:-moz-lwtheme,\s*\[lwtheme\]\)\s+#nav-bar/.test(css),
+      /:root:not\(\[lwtheme\]\)\s+#nav-bar/.test(css),
+      `${theme} no-theme navBar CSS must use :root:not([lwtheme]) #nav-bar`,
+    );
+    assert(
+      /:root:not\(\[lwtheme\]\)\s+#PersonalToolbar/.test(css),
+      `${theme} no-theme navBar CSS must use :root:not([lwtheme]) #PersonalToolbar`,
+    );
+    assert(
+      !/:not\(:-moz-lwtheme\)/.test(css),
+      `${theme} navBar CSS must not use :not(:-moz-lwtheme) — Gecko 152 drops the whole rule`,
+    );
+
+    // The LWT branch must scope the nav-bar/PersonalToolbar to the toolbar
+    // surface color via the [lwtheme] attribute.
+    assert(
+      /:root\[lwtheme\]\s+#nav-bar/.test(css),
       `${theme} navBar CSS must scope #nav-bar to the toolbar color under LWT`,
     );
     assert(
-      /:root:is\(:-moz-lwtheme,\s*\[lwtheme\]\)\s+#PersonalToolbar/.test(css),
+      /:root\[lwtheme\]\s+#PersonalToolbar/.test(css),
       `${theme} navBar CSS must scope #PersonalToolbar to the toolbar color under LWT`,
     );
+
     // The LWT branch must read the toolbar color, NOT --tab-selected-bgcolor.
-    // The LWT rules form one selector group: `:root:is(...) #nav-bar,
-    // :root:is(...) #PersonalToolbar { ... }`. Extract that single block.
+    // The LWT rules form one selector group:
+    //   `:root[lwtheme] #nav-bar, :root[lwtheme] #PersonalToolbar { ... }`.
     const lwtBlockMatch = css.match(
-      /:root:is\(:-moz-lwtheme,\s*\[lwtheme\]\)\s+#nav-bar,[\s\S]*?\}/,
+      /:root\[lwtheme\]\s+#nav-bar,[\s\S]*?\}/,
     );
     const lwtBlock = lwtBlockMatch ? lwtBlockMatch[0] : "";
     assert(
       lwtBlock !== "",
-      `${theme} navBar CSS must have an LWT-scoped selector group for #nav-bar`,
+      `${theme} navBar CSS must have an [lwtheme]-scoped selector group for #nav-bar`,
+    );
+    assert(
+      lwtBlock.includes("--toolbar-bgcolor"),
+      `${theme} LWT navBar branch must read --toolbar-bgcolor (the token the LWT toolbar / selected tab track)`,
     );
     assert(
       lwtBlock.includes("--toolbar-background-color"),
-      `${theme} LWT navBar branch must read --toolbar-background-color`,
+      `${theme} LWT navBar branch must read --toolbar-background-color as fallback`,
     );
     assert(
       !lwtBlock.includes("--tab-selected-bgcolor"),
       `${theme} LWT navBar branch must NOT read --tab-selected-bgcolor (that is what floats the bar off the toolbar under LWT)`,
+    );
+
+    // CRITICAL ordering check: on Gecko 152 the legacy --toolbar-bgcolor and the
+    // new --toolbar-background-color DIVERGE (e.g. default-theme dark:
+    // --toolbar-bgcolor = #171717, --toolbar-background-color = rgb(43,42,51)).
+    // Firefox 152 still paints the selected .tab-background from --toolbar-bgcolor,
+    // and Lepton's color_like_toolbar unsets --tab-selected-bgcolor so the tab
+    // resolves to --toolbar-bgcolor. The nav-bar must therefore prefer
+    // --toolbar-bgcolor OVER --toolbar-background-color, or the bar will not
+    // match the selected tab. We assert the literal `var(--toolbar-bgcolor, var(
+    // --toolbar-background-color))` ordering for both branches.
+    assert(
+      lwtBlock.includes(
+        "var(--toolbar-bgcolor, var(--toolbar-background-color))",
+      ),
+      `${theme} LWT navBar branch must prefer --toolbar-bgcolor over --toolbar-background-color`,
+    );
+
+    // The no-theme branch SHOULD read --tab-selected-bgcolor (Lepton aligns the
+    // tab to the toolbar in this case, so the tab color IS the toolbar color).
+    const noThemeBlockMatch = css.match(
+      /:root:not\(\[lwtheme\]\)\s+#nav-bar,[\s\S]*?\}/,
+    );
+    const noThemeBlock = noThemeBlockMatch ? noThemeBlockMatch[0] : "";
+    assert(
+      noThemeBlock !== "",
+      `${theme} navBar CSS must have a :not([lwtheme]) selector group for #nav-bar`,
+    );
+    assert(
+      noThemeBlock.includes("--tab-selected-bgcolor"),
+      `${theme} no-theme navBar branch must read --tab-selected-bgcolor (Lepton makes the tab track the toolbar)`,
+    );
+    // Same divergence-avoidance ordering as the LWT branch: --toolbar-bgcolor
+    // must come BEFORE --toolbar-background-color so the bar matches the
+    // selected tab under system-theme = auto / dark mode (Issue: system auto).
+    assert(
+      noThemeBlock.includes(
+        "var(--toolbar-bgcolor, var(--toolbar-background-color))",
+      ),
+      `${theme} no-theme navBar branch must prefer --toolbar-bgcolor over --toolbar-background-color so the bar matches the selected tab on Gecko 152`,
     );
   }
 }
