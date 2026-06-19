@@ -1,21 +1,34 @@
 // SPDX-License-Identifier: MPL-2.0
 // @colocated-env browser
 //
-// Regression tests for the Lepton / Gecko 152 (Project Nova) compatibility
-// layer. See `utils/lepton-compat-152.css.ts` and Floorp Issue #2489.
+// Regression tests for the Gecko 152 (Project Nova) compatibility layers.
+// See `utils/gecko-152-var-aliases.css.ts` and
+// `utils/lepton-compat-152.css.ts`, and Floorp Issue #2489.
 //
-// Background: Lepton v8.6.2 detects built-in themes through brittle selectors
-// (`[lwtheme-mozlightdark]`, `[builtintheme]`, exact-RGB inline `style*=`
-// matches) that Gecko 152 stopped populating reliably. The result was the
-// chrome collapsing to a single color and dialogs going black. These tests
-// pin down the compat layer so a future upstream Lepton sync or a Gecko
-// version bump cannot silently drop the fix.
+// Background: Gecko 152 renamed a large set of chrome CSS custom properties
+// (toolbar/toolbox/tab/toolbarbutton/panel tokens) and folded the
+// `arrowpanel-*` family into the `panel-*` family. It also made the
+// built-in-theme signals that user style sheets relied on unreliable. The
+// result, without these layers, was the chrome collapsing to a single color,
+// dialogs going black, and tabs not painting — especially under third-party
+// LWTs.
+//
+// These tests pin the layers down so a future upstream Lepton sync or a
+// Gecko version bump cannot silently drop the fix. They verify the alias
+// *chains as real CSS fragments* (not just substring presence) and assert the
+// non-destructive LWT contract that was the whole point of the rewrite.
 
 import {
+  GECKO_152_COLOR_FIX_CSS,
   LEPTON_COMPAT_152_CSS,
   LEPTON_COMPAT_CSS,
   FLOORP_ICON_PATCHES,
 } from "../utils/lepton-compat-152.css.ts";
+import {
+  GECKO_152_RENAMED_VARS,
+  GECKO_152_SYNTHESIZED_VARS,
+  GECKO_152_VAR_ALIASES_CSS,
+} from "../utils/gecko-152-var-aliases.css.ts";
 import { getCSSFromConfig } from "../utils/css.ts";
 import {
   assert,
@@ -76,16 +89,149 @@ function getInlineChromeCss(
   return r.chromeStylesRaw?.join("\n") ?? "";
 }
 
+/**
+ * Extract the value of a `--name: value;` declaration from a CSS string.
+ * Returns the raw value (trimmed) or "" when not found. Handles values that
+ * span a single line; the alias layer is single-line-per-property so that is
+ * sufficient.
+ */
+function extractVarDecl(css: string, name: string): string {
+  const re = new RegExp(
+    "--" + name.replace(/^--/, "") + "\\s*:\\s*([^;]+);",
+  );
+  const m = css.match(re);
+  return m ? m[1].trim() : "";
+}
+
 // ---------------------------------------------------------------------------
-// Tests — compat layer is injected for the affected themes
+// Tests — the alias table matches the 151 -> 152 rename evidence
+// ---------------------------------------------------------------------------
+
+/**
+ * The renamed-variable table must contain exactly the renames proven by the
+ * Floorp-Runtime PR #45 diff. A typo or a phantom entry (the previous
+ * revision listed `--toolbar-color` as a rename of `--toolbar-text-color`,
+ * which is false) silently breaks components or synthesizes nonsense. Pin
+ * the canonical mapping here.
+ */
+function testRenamedVarsTableIsCanonical(): void {
+  const expected: Array<[string, string]> = [
+    ["--toolbar-bgcolor", "--toolbar-background-color"],
+    ["--toolbox-bgcolor", "--toolbox-background-color"],
+    ["--toolbox-textcolor", "--toolbox-text-color"],
+    ["--toolbox-bgcolor-inactive", "--toolbox-background-color-inactive"],
+    ["--toolbox-textcolor-inactive", "--toolbox-text-color-inactive"],
+    ["--tab-selected-bgcolor", "--tab-background-color-selected"],
+    ["--tab-hover-background-color", "--tab-background-color-hover"],
+    [
+      "--toolbarbutton-hover-background",
+      "--toolbarbutton-background-color-hover",
+    ],
+    [
+      "--toolbarbutton-active-background",
+      "--toolbarbutton-background-color-active",
+    ],
+    ["--arrowpanel-background", "--panel-background-color"],
+    ["--arrowpanel-color", "--panel-text-color"],
+    ["--arrowpanel-border-color", "--panel-border-color"],
+    ["--panel-background", "--panel-background-color"],
+  ];
+  assertEquals(
+    [...GECKO_152_RENAMED_VARS].sort((a, b) => a[0].localeCompare(b[0])),
+    expected.sort((a, b) => a[0].localeCompare(b[0])),
+    "GECKO_152_RENAMED_VARS must match the 151->152 evidence table exactly",
+  );
+}
+
+/** `--toolbar-color` survived 152 unchanged; it must NOT appear as a rename
+ *  source (the previous revision's phantom entry). */
+function testToolbarColorIsNotARenameSource(): void {
+  const asLegacy = GECKO_152_RENAMED_VARS.some(([legacy]) =>
+    legacy === "--toolbar-color"
+  );
+  assert(
+    !asLegacy,
+    "--toolbar-color is NOT renamed in Gecko 152 (still defined in " +
+      "global-shared.css) and must not be an alias source",
+  );
+}
+
+/**
+ * `--toolbar-text-color` is referenced on 152 (tab.tokens.css:79) but defined
+ * nowhere by Mozilla. It must be synthesized by Floorp, chained to the
+ * LWT-provided text color with the surviving `--toolbar-color` as fallback.
+ */
+function testToolbarTextColorIsSynthesized(): void {
+  const entry = GECKO_152_SYNTHESIZED_VARS.find(([n]) =>
+    n === "--toolbar-text-color"
+  );
+  assert(entry !== undefined, "--toolbar-text-color must be synthesized");
+  // The chain must prefer the LWT-provided --lwt-text-color, then fall back
+  // to the surviving --toolbar-color.
+  const chain = entry![1];
+  assert(
+    chain.includes("--lwt-text-color") && chain.includes("--toolbar-color"),
+    "--toolbar-text-color chain must prefer --lwt-text-color and fall back to " +
+      "--toolbar-color, got: " + chain,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tests — every alias is emitted as a correct, non-cyclic CSS declaration
+// ---------------------------------------------------------------------------
+
+/** Each renamed token must be emitted as `legacy: var(new);` with no
+ *  self-reference and no !important. */
+function testRenamedAliasesAreEmittedCorrectly(): void {
+  for (const [legacy, renamed] of GECKO_152_RENAMED_VARS) {
+    const value = extractVarDecl(GECKO_152_VAR_ALIASES_CSS, legacy);
+    assert(
+      value !== "",
+      `${legacy} must be declared in GECKO_152_VAR_ALIASES_CSS`,
+    );
+    assert(
+      value === `var(${renamed})`,
+      `${legacy} must alias exactly to var(${renamed}), got: ${value}`,
+    );
+    assert(
+      !value.includes("!important"),
+      `${legacy} alias must NOT use !important (theme/LWT values must win)`,
+    );
+    // No cyclic self-reference: the alias must not invoke `var(legacy)`.
+    // Use a name-boundary match so `--panel-background` does not falsely
+    // match against `--panel-background-color`.
+    const cyclicRe = new RegExp(
+      "var\\(\\s*" + legacy.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") +
+        "(?![-a-z0-9])",
+    );
+    assert(
+      !cyclicRe.test(value),
+      `${legacy} alias must not reference itself via var(${legacy}) (cyclic), ` +
+        `got: ${value}`,
+    );
+  }
+}
+
+/** Each synthesized token must be emitted verbatim from the table. */
+function testSynthesizedAliasesAreEmittedCorrectly(): void {
+  for (const [name, chain] of GECKO_152_SYNTHESIZED_VARS) {
+    const value = extractVarDecl(GECKO_152_VAR_ALIASES_CSS, name);
+    assertEquals(
+      value,
+      chain,
+      `${name} must be emitted as the exact chain from the table`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tests — compat layer is injected for the right themes
 // ---------------------------------------------------------------------------
 
 /** The three Lepton-backed designs must include the compat CSS inline. */
 function testLeptonThemesIncludeCompatCss(): void {
   for (const theme of ["lepton", "photon", "protonfix"] as const) {
     const css = getInlineChromeCss(theme);
-    // `LEPTON_COMPAT_CSS` carries the banner comment, which is the most
-    // stable fingerprint of the compat layer being present.
     assert(
       css.includes("Floorp Lepton compat"),
       `${theme} should include the Lepton Gecko 152 compat stylesheet`,
@@ -93,27 +239,39 @@ function testLeptonThemesIncludeCompatCss(): void {
   }
 }
 
-/** Compat must NOT leak into themes that don't use Lepton. */
-function testNonLeptonThemesExcludeCompatCss(): void {
-  for (const theme of ["fluerial", "proton"] as const) {
+/**
+ * The shared color-fix layer must reach EVERY chrome-rendering theme now,
+ * including fluerial (it was previously Lepton-only, leaving fluerial users
+ * exposed to the black-dialog / transparent-panel symptoms).
+ */
+function testAllSkinnedThemesIncludeColorFix(): void {
+  for (const theme of ["fluerial", "lepton", "photon", "protonfix"] as const) {
     const css = getInlineChromeCss(theme);
     assert(
-      !css.includes("Floorp Lepton compat"),
-      `${theme} must NOT include the Lepton compat stylesheet`,
+      css.includes("Floorp Gecko 152 color fix"),
+      `${theme} should include the shared Gecko 152 color-fix layer`,
     );
   }
+}
+
+/** The built-in `proton` design ships no Floorp skin CSS, so neither layer
+ *  should be present for it. */
+function testProtonExcludesBothLayers(): void {
+  const css = getInlineChromeCss("proton");
+  assert(
+    !css.includes("Floorp Lepton compat"),
+    "proton must NOT include the Lepton compat stylesheet",
+  );
+  assert(
+    !css.includes("Floorp Gecko 152 color fix"),
+    "proton must NOT include the color-fix layer (it has no skin CSS at all)",
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Tests — the compat layer uses robust, Gecko-152-safe detection
 // ---------------------------------------------------------------------------
 
-/**
- * The whole point of the fix: do NOT depend on the brittle matchers that
- * Gecko 152 broke. The compat CSS should steer by `:-moz-lwtheme` /
- * `[lwtheme]` / `prefers-color-scheme`, not by `[lwtheme-mozlightdark]`,
- * `[builtintheme]` or hardcoded RGB triples.
- */
 function testCompatAvoidsBrittleSelectors(): void {
   assert(
     !LEPTON_COMPAT_152_CSS.includes("[lwtheme-mozlightdark]"),
@@ -124,20 +282,6 @@ function testCompatAvoidsBrittleSelectors(): void {
     !LEPTON_COMPAT_152_CSS.includes("[builtintheme]"),
     "compat layer must not rely on the [builtintheme] attribute " +
       "(unreliable on Gecko 152)",
-  );
-  assert(
-    !LEPTON_COMPAT_152_CSS.includes(
-      '--lwt-accent-color: rgb(240, 240, 244)',
-    ),
-    "compat layer must not hardcode the light built-in RGB triple " +
-      "(Mozilla changes these between versions)",
-  );
-  assert(
-    !LEPTON_COMPAT_152_CSS.includes(
-      '--lwt-accent-color: rgb(28, 27, 34)',
-    ),
-    "compat layer must not hardcode the dark built-in RGB triple " +
-      "(Mozilla changes these between versions)",
   );
 }
 
@@ -155,57 +299,91 @@ function testCompatUsesRobustLwtSignals(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Tests — Gecko 152 tab/toolbox variable aliases (the tab rendering fix)
+// Tests — the non-destructive LWT contract (the core of the rewrite)
 // ---------------------------------------------------------------------------
 
 /**
- * Gecko 152 renamed the tab/toolbox custom properties Lepton reads. The
- * visible breakage in Issue #2489 (tabs not painting correctly) traces back
- * to Lepton referencing the old names that no longer resolve. The compat
- * layer must re-expose every renamed token under its legacy name.
+ * Regression for the bug that broke third-party LWTs: the previous revision
+ * force-set `--lwt-accent-color`, `--toolbar-bgcolor` and
+ * `--arrowpanel-background` with `!important` under BROAD selectors, which
+ * clobbered a loaded LWT's own palette. Verify that no color-setting rule
+ * in either layer uses `!important` — values must be guarded aliases or
+ * scoped to the no-theme case, so a theme that provides its own value wins.
  */
-function testCompatAliasesAllRenamedTabTokens(): void {
-  // Each legacy name Lepton uses must be re-exposed as an alias.
-  const aliases: Array<[string, string]> = [
-    ["--tab-selected-bgcolor", "--tab-background-color-selected"],
-    ["--tab-hover-background-color", "--tab-background-color-hover"],
-    ["--toolbox-bgcolor", "--toolbox-background-color"],
-    ["--toolbox-bgcolor-inactive", "--toolbox-background-color-inactive"],
-  ];
-  for (const [legacy, renamed] of aliases) {
-    const declaresLegacy = new RegExp(`${legacy}\\s*:`).test(
-      LEPTON_COMPAT_152_CSS,
-    );
-    assert(
-      declaresLegacy,
-      `compat layer must re-expose ${legacy} (removed in Gecko 152)`,
-    );
-    const referencesRenamed = LEPTON_COMPAT_152_CSS.includes(renamed);
-    assert(
-      referencesRenamed,
-      `compat layer should define ${legacy} in terms of the new ${renamed}`,
+function testNoColorOverrideUsesImportant(): void {
+  for (const [label, css] of [
+    ["LEPTON_COMPAT_152_CSS", LEPTON_COMPAT_152_CSS],
+    ["GECKO_152_COLOR_FIX_CSS", GECKO_152_COLOR_FIX_CSS],
+  ] as const) {
+    // Find every custom-property declaration and assert none carries
+    // !important. (Declarations like `stroke: transparent !important` in the
+    // icon patches are fine and not in these two strings.)
+    const declRe = /(--[a-z-]+\s*:\s*[^;]*!important\s*;)/gi;
+    const offenders = css.match(declRe);
+    assertEquals(
+      offenders,
+      null,
+      `${label} must not set any custom property with !important ` +
+        "(that is what clobbers loaded LWT palettes); found: " +
+        (offenders?.join(" | ") ?? ""),
     );
   }
 }
 
-/** Aliases must not hardcode a single value: they must chain through the new
- *  token so theme/LWT-provided colors still flow correctly. */
-function testCompatAliasesChainToNewTokens(): void {
-  assert(
-    new RegExp(
-      "--tab-selected-bgcolor:\\s*var\\(--tab-background-color-selected",
-    ).test(LEPTON_COMPAT_152_CSS),
-    "--tab-selected-bgcolor alias must chain to --tab-background-color-selected",
-  );
+/**
+ * Every rule that sets a theme/LWT-owned token (`--lwt-accent-color`,
+ * `--toolbar-bgcolor`, `--arrowpanel-*`, `--in-content-page-background`) must
+ * be scoped to the no-theme case (`:root:not([lwtheme]):not(:-moz-lwtheme)`)
+ * — OR be a guarded `var(name, fallback)` alias. This is what lets a
+ * third-party LWT keep its own palette. */
+function testLwtOwnedTokensAreGuardedOrNoThemeScoped(): void {
+  const lwtOwned = [
+    "--lwt-accent-color",
+    "--toolbar-bgcolor",
+    "--arrowpanel-background",
+    "--arrowpanel-color",
+    "--arrowpanel-border-color",
+    "--in-content-page-background",
+  ];
+  const combined = LEPTON_COMPAT_152_CSS + "\n" + GECKO_152_COLOR_FIX_CSS;
+  for (const token of lwtOwned) {
+    // Match each declaration of this token and capture the whole rule's
+    // selector by grabbing text up to the preceding `}` or start of string.
+    const declRe = new RegExp(
+      "([\\s\\S]*?)\\{[^{}]*" +
+        token.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") +
+        "\\s*:[^;}]*[;}]",
+      "g",
+    );
+    let m: RegExpExecArray | null;
+    while ((m = declRe.exec(combined)) !== null) {
+      const selectorChunk = (m[1] ?? "").trim();
+      const isNoThemeScoped = selectorChunk.includes(":not([lwtheme])") ||
+        selectorChunk.includes(":not(:-moz-lwtheme)");
+      const declValue = m[0].slice(m[0].indexOf(token));
+      const isGuardedAlias = /var\(\s*--lwt-accent-color/.test(declValue) ||
+        /var\(\s*--toolbar-background-color/.test(declValue) ||
+        /var\(\s*--panel-background-color/.test(declValue) ||
+        /var\(\s*--panel-text-color/.test(declValue) ||
+        /var\(\s*--panel-border-color/.test(declValue);
+      assert(
+        isNoThemeScoped || isGuardedAlias,
+        `${token} must only be set in the no-theme scope or via a guarded ` +
+          `alias (so a loaded LWT keeps its value); offending selector: ` +
+          `"${selectorChunk}"`,
+      );
+    }
+  }
 }
 
-/** The alias block must stay backward compatible on Gecko < 152 where the
- *  new token names do not exist. */
-function testCompatAliasesAreBackwardCompatible(): void {
+/** The LWT accent must NOT be the broken cyclic `var(--lwt-accent-color,
+ *  revert)` form from the previous revision (which degenerated to `revert`
+ *  and let nothing through). */
+function testNoCyclicLwtAccentReference(): void {
   assert(
-    LEPTON_COMPAT_152_CSS.includes("@supports not") &&
-      LEPTON_COMPAT_152_CSS.includes("--tab-background-color-selected: initial"),
-    "compat layer must guard the new-token aliases with @supports for Gecko < 152",
+    !/var\(\s*--lwt-accent-color\s*,\s*revert\s*\)/.test(LEPTON_COMPAT_152_CSS),
+    "compat layer must not use the cyclic var(--lwt-accent-color, revert) " +
+      "form — it degenerates to revert and blocks the LWT palette",
   );
 }
 
@@ -213,26 +391,25 @@ function testCompatAliasesAreBackwardCompatible(): void {
 // Tests — the two reported symptoms are directly addressed
 // ---------------------------------------------------------------------------
 
-/** "The whole UI turns blue" — ensure the LWT's own accent is allowed
- *  through rather than clobbered by a stale Lepton override. */
-function testCompatLetsLwtAccentThrough(): void {
-  assert(
-    LEPTON_COMPAT_152_CSS.includes("--lwt-accent-color") &&
-      LEPTON_COMPAT_152_CSS.includes(":-moz-lwtheme"),
-    "compat layer should restore --lwt-accent-color flow for LWTs",
-  );
-}
-
 /** "Dialog boxes show a black background" — ensure in-content / dialog
  *  background is anchored to a stable per-scheme value. */
 function testCompatFixesDialogBackground(): void {
   assert(
-    LEPTON_COMPAT_152_CSS.includes("--in-content-page-background"),
-    "compat layer should pin --in-content-page-background for dialogs",
+    GECKO_152_COLOR_FIX_CSS.includes("--in-content-page-background"),
+    "color-fix layer should pin --in-content-page-background for dialogs",
   );
   assert(
-    LEPTON_COMPAT_CSS.includes("dialog"),
-    "compat layer should target the dialog element",
+    GECKO_152_COLOR_FIX_CSS.includes("dialog"),
+    "color-fix layer should target the dialog element",
+  );
+}
+
+/** "The whole UI turns blue" / "transparent panels" — ensure the panel
+ *  background gets a safe default for the no-theme case. */
+function testCompatFixesPanelBackground(): void {
+  assert(
+    GECKO_152_COLOR_FIX_CSS.includes("--arrowpanel-background"),
+    "color-fix layer should provide a default --arrowpanel-background",
   );
 }
 
@@ -240,11 +417,6 @@ function testCompatFixesDialogBackground(): void {
 // Tests — Floorp-specific icon patches are preserved out-of-vendor
 // ---------------------------------------------------------------------------
 
-/**
- * These Floorp-only IDs (PWA/SSB, UserCSSLoader, webpanel, share mode) lived
- * inside the vendored leptonChrome.css and would be wiped by the daily
- * upstream sync. Verify they are hosted in the compat layer so they survive.
- */
 function testFloorpIconPatchesPresent(): void {
   const floorpIds = [
     "#ssbPageAction-image",
@@ -264,16 +436,19 @@ function testFloorpIconPatchesPresent(): void {
   }
 }
 
-/** Bundled export is the sum of the color fix and the icon patches. */
-function testBundledCompatIsColorPlusIcons(): void {
+/** Bundled export is the sum of the color fix, the Lepton compat, and the
+ *  icon patches. */
+function testBundledCompatIsColorPlusLeptonPlusIcons(): void {
   assertEquals(
     LEPTON_COMPAT_CSS,
-    LEPTON_COMPAT_152_CSS + "\n" + FLOORP_ICON_PATCHES,
-    "LEPTON_COMPAT_CSS must bundle the color fixes and Floorp icon patches",
+    GECKO_152_COLOR_FIX_CSS + "\n" + LEPTON_COMPAT_152_CSS + "\n" +
+      FLOORP_ICON_PATCHES,
+    "LEPTON_COMPAT_CSS must bundle the color fix + Lepton compat + icon patches",
   );
 }
 
-/** The icon patches ride along with the affected themes. */
+/** The icon patches ride along with the Lepton family only (the IDs are
+ *  Lepton-scoped). */
 function testLeptonThemesIncludeFloorpIconPatches(): void {
   for (const theme of ["lepton", "photon", "protonfix"] as const) {
     const css = getInlineChromeCss(theme);
@@ -284,24 +459,47 @@ function testLeptonThemesIncludeFloorpIconPatches(): void {
   }
 }
 
+/** fluerial gets the color fix but NOT the Lepton icon patches. */
+function testFluerialExcludesLeptonIconPatches(): void {
+  const css = getInlineChromeCss("fluerial");
+  assert(
+    !css.includes("#usercssloader-menu"),
+    "fluerial must NOT include the Lepton-scoped Floorp icon patches",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 
 export async function runAllTests(): Promise<void> {
   await runTests("lepton-compat.test.ts", [
+    // alias table canonicality
+    { name: "renamed vars table is canonical", fn: testRenamedVarsTableIsCanonical },
+    { name: "--toolbar-color is not a rename source", fn: testToolbarColorIsNotARenameSource },
+    { name: "--toolbar-text-color is synthesized", fn: testToolbarTextColorIsSynthesized },
+    // alias emission
+    { name: "renamed aliases are emitted correctly", fn: testRenamedAliasesAreEmittedCorrectly },
+    { name: "synthesized aliases are emitted correctly", fn: testSynthesizedAliasesAreEmittedCorrectly },
+    // injection scope
     { name: "lepton themes include compat css", fn: testLeptonThemesIncludeCompatCss },
-    { name: "non-lepton themes exclude compat css", fn: testNonLeptonThemesExcludeCompatCss },
+    { name: "all skinned themes include color fix", fn: testAllSkinnedThemesIncludeColorFix },
+    { name: "proton excludes both layers", fn: testProtonExcludesBothLayers },
+    // robust detection
     { name: "compat avoids brittle selectors", fn: testCompatAvoidsBrittleSelectors },
     { name: "compat uses robust lwt signals", fn: testCompatUsesRobustLwtSignals },
-    { name: "compat aliases all renamed tab tokens", fn: testCompatAliasesAllRenamedTabTokens },
-    { name: "compat aliases chain to new tokens", fn: testCompatAliasesChainToNewTokens },
-    { name: "compat aliases are backward compatible", fn: testCompatAliasesAreBackwardCompatible },
-    { name: "compat lets lwt accent through (blue UI symptom)", fn: testCompatLetsLwtAccentThrough },
+    // non-destructive LWT contract
+    { name: "no color override uses !important", fn: testNoColorOverrideUsesImportant },
+    { name: "lwt-owned tokens are guarded or no-theme scoped", fn: testLwtOwnedTokensAreGuardedOrNoThemeScoped },
+    { name: "no cyclic lwt accent reference", fn: testNoCyclicLwtAccentReference },
+    // symptom coverage
     { name: "compat fixes dialog background (black dialog symptom)", fn: testCompatFixesDialogBackground },
+    { name: "compat fixes panel background (transparent panel symptom)", fn: testCompatFixesPanelBackground },
+    // icon patches
     { name: "floorp icon patches present", fn: testFloorpIconPatchesPresent },
-    { name: "bundled compat is color plus icons", fn: testBundledCompatIsColorPlusIcons },
+    { name: "bundled compat is color + lepton + icons", fn: testBundledCompatIsColorPlusLeptonPlusIcons },
     { name: "lepton themes include floorp icon patches", fn: testLeptonThemesIncludeFloorpIconPatches },
+    { name: "fluerial excludes lepton icon patches", fn: testFluerialExcludesLeptonIconPatches },
   ]);
 }
 

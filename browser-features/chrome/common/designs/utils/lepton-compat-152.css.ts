@@ -4,68 +4,131 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * # Lepton Compatibility Layer for Gecko 152 (Project Nova)
+ * # Gecko 152 (Project Nova) compatibility layers
  *
- * ## Why this exists (Floorp Issue #2489)
+ * Gecko 152 renamed a large set of chrome CSS variables (see
+ * `gecko-152-var-aliases.css.ts`) AND made the built-in-theme signals that
+ * user style sheets historically relied on unreliable. The alias file covers
+ * the renames; this file covers the rest:
  *
- * Firefox 152 ("Project Nova", released 2026-06-16) redesigned the browser
- * chrome and changed how built-in themes expose themselves to user style
- * sheets. The vendored Lepton CSS (`skin/lepton/css/leptonChrome.css`,
- * v8.6.2) detects built-in light/dark themes through three parallel,
- * brittle mechanisms:
+ *   1. `GECKO_152_COLOR_FIX_CSS` — theme/LWT color stabilization. Applied to
+ *      EVERY design (including `fluerial`), because dialogs going black and
+ *      the chrome collapsing to a single color are not Lepton-specific
+ *      symptoms — they hit any chrome component that reads `--lwt-accent-color`
+ *      / `--in-content-page-background` / `--arrowpanel-background` once the
+ *      built-in-theme block stops matching.
+ *   2. `LEPTON_COMPAT_152_CSS` — Lepton-only tab/toolbox variable aliases and
+ *      palette restoration that mirrors Lepton's intended colors. Applied
+ *      only to the `lepton` / `photon` / `protonfix` designs.
+ *   3. `FLOORP_ICON_PATCHES` — Floorp-only icon rules extracted from the
+ *      vendored leptonChrome.css so the daily upstream sync cannot delete
+ *      them. Lepton-family only (the IDs are Lepton-scoped).
  *
- *   1. `[lwtheme-mozlightdark]` attribute      (82 occurrences)
- *   2. `[builtintheme][devtoolstheme="..."]`    (66 occurrences)
- *   3. inline `[style*="--lwt-accent-color: rgb(240, 240, 244); …"]`
- *      exact-string RGB matching               (82 occurrences)
+ * ## Design rule: never clobber a theme-provided value
  *
- * Gecko 152 no longer reliably populates these in the way Lepton expects, so
- * the selectors silently fail to match and the `!important` color overrides
- * on `--lwt-accent-color`, `--toolbar-bgcolor`, `--arrowpanel-background`,
- * `--in-content-page-background`, etc. never apply. The visible symptom
- * (reported on Issue #2489 with third-party LWTs such as "Windows XP
- * modern") is the chrome collapsing to a uniform blue and dialog boxes
- * rendering with a black background. `fluerial` and the built-in `proton`
- * design are unaffected because they do not use Lepton CSS.
- *
- * ## Approach
- *
- * We do **not** patch the vendored Lepton files: the `update_lepton.yml`
- * workflow re-syncs them from upstream daily and would clobber any local
- * edit. Instead this module exports CSS strings that are injected by
- * `css.ts` **after** Lepton's own sheets, so equal-specificity rules here
- * win by source order. This keeps the upstream sync path clean and lets us
- * adapt to Gecko 153+ by editing only this file.
- *
- * The selectors below deliberately rely on the stable `:-moz-lwtheme` /
- * `[lwtheme]` / `[lwthemetextcolor]` signals rather than hardcoded RGB
- * triples or attributes that Mozilla renames between versions.
- *
- * ## Scope
- *
- * Applied only to the `lepton`, `photon` and `protonfix` designs (they share
- * the same Lepton CSS). `fluerial` and `proton` are untouched.
+ * The previous version of this file force-overrode `--lwt-accent-color`,
+ * `--toolbar-bgcolor` and `--arrowpanel-background` with `!important` under
+ * broad selectors. That is what broke third-party LWTs ("Windows XP modern"
+ * etc.): the theme author's own palette was discarded and the whole chrome
+ * collapsed to one color. Every rule below now either:
+ *   - sets a value ONLY when none is provided (a guarded alias, no
+ *     `!important`), or
+ *   - narrows the selector to the no-theme case (`:root:not([lwtheme])`)
+ *     so a loaded LWT is never touched.
  *
  * Reference: https://github.com/Floorp-Projects/Floorp/issues/2489
  */
 
 /**
- * Restore sane chrome colors under Gecko 152 when Lepton's built-in-theme
- * detection fails.
+ * Theme/LWT color stabilization — applied to every design.
  *
- * Strategy:
- *  - For a loaded LWT (third-party themes like "Windows XP modern"): respect
- *    the theme's own `--lwt-accent-color` / `--lwt-text-color` instead of
- *    letting Lepton's stale overrides collapse everything to one color.
- *  - For the built-in themes when Lepton's detection misses: re-establish
- *    Lepton's intended accent (`rgb(240, 240, 244)` light /
- *    `rgb(28, 27, 34)` dark) using `prefers-color-scheme` rather than the
- *    brittle inline-style/attribute matchers.
- *  - Fix dialog backgrounds (`--in-content-page-background`) which Lepton
- *    ties to `--lwt-accent-color`; on 152 this surfaced as black dialogs.
- *  - Re-declare the Lepton "accent blue" tokens for primary buttons so they
- *    keep their color even when the built-in-theme block above them no
- *    longer matches.
+ * What this fixes:
+ *  - **Black dialogs.** Lepton and several Floorp components derive
+ *    `--in-content-page-background` from `--lwt-accent-color`. On 152 the
+ *    accent can resolve to nothing in-content, so dialogs paint black. Anchor
+ *    in-content surfaces to a stable per-scheme value, and let an LWT that
+ *    actually provides an accent override it.
+ *  - **Transparent panels.** `--arrowpanel-background` (the legacy name the
+ *    components still read) is now an alias of `--panel-background-color`,
+ *    but when neither is set the panel goes transparent. Provide a safe
+ *    default for the no-theme case only.
+ *
+ * What this deliberately does NOT do:
+ *  - override `--lwt-accent-color` / `--toolbar-bgcolor` globally. Those are
+ *    the LWT author's own palette and must flow through untouched. The
+ *    broad `!important` overrides that used to live here were the root cause
+ *    of custom-theme breakage.
+ */
+export const GECKO_152_COLOR_FIX_CSS = `
+/* =========================================================================
+ * Floorp Gecko 152 color fix (applied to every design)
+ * See utils/lepton-compat-152.css.ts.
+ * ======================================================================= */
+
+/*= Dialog background (the "black dialog" symptom) ==========================
+ * Anchor in-content surfaces to a stable per-scheme value. Only the no-theme
+ * case is pinned; a loaded LWT may still override via its own accent. */
+@media (prefers-color-scheme: light) {
+  :root:not([lwtheme]):not(:-moz-lwtheme),
+  :root:not([lwtheme]):not(:-moz-lwtheme) dialog {
+    --in-content-page-background: rgb(255, 255, 255);
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([lwtheme]):not(:-moz-lwtheme),
+  :root:not([lwtheme]):not(:-moz-lwtheme) dialog {
+    --in-content-page-background: rgb(31, 30, 38);
+  }
+}
+/* An LWT-provided accent wins for in-content surfaces — but ONLY when the
+ * theme actually sets one. var(..., <keep>) via @property is not available
+ * cross-version, so guard by scoping to the LWT selector and reading the
+ * accent directly. No !important: this is equal-specificity source-order. */
+:root:is(:-moz-lwtheme, [lwtheme]),
+:root:is(:-moz-lwtheme, [lwtheme]) dialog {
+  --in-content-page-background: var(--lwt-accent-color);
+}
+
+/*= Panel background default (the "transparent panel" symptom) ==============
+ * Only fill in a default for the no-theme case. A loaded LWT or a custom
+ * theme that sets --arrowpanel-background / --panel-background-color must
+ * keep its value (the alias in gecko-152-var-aliases already chains them). */
+:root:not([lwtheme]):not(:-moz-lwtheme) {
+  --arrowpanel-background: var(--panel-background-color, -moz-dialog);
+  --arrowpanel-color: var(--panel-text-color, -moz-dialogtext);
+  --arrowpanel-border-color: var(--panel-border-color, rgba(0, 0, 0, 0.1));
+}
+`;
+
+/**
+ * Lepton-specific compatibility — applied only to `lepton` / `photon` /
+ * `protonfix` (they share the vendored Lepton CSS).
+ *
+ * Why this exists (Floorp Issue #2489): the vendored Lepton CSS
+ * (`skin/lepton/css/leptonChrome.css`) detects built-in light/dark themes
+ * through three brittle mechanisms that Gecko 152 no longer populates
+ * reliably:
+ *
+ *   1. `[lwtheme-mozlightdark]` attribute
+ *   2. `[builtintheme][devtoolstheme="..."]`
+ *   3. inline `[style*="--lwt-accent-color: rgb(240, 240, 244); …"]`
+ *      exact-string RGB matching
+ *
+ * When the detection misses, Lepton's `!important` color overrides on
+ * `--lwt-accent-color`, `--toolbar-bgcolor`, `--arrowpanel-background`, etc.
+ * never apply. `fluerial` and the built-in `proton` design are unaffected
+ * because they do not use Lepton CSS.
+ *
+ * We do **not** patch the vendored Lepton files: the `update_lepton.yml`
+ * workflow re-syncs them from upstream daily and would clobber any local
+ * edit. Instead this is injected AFTER Lepton's own sheets, so
+ * equal-specificity rules here win by source order. This keeps the upstream
+ * sync path clean and lets us adapt to Gecko 153+ by editing only this file.
+ *
+ * The selectors below deliberately rely on the stable `:-moz-lwtheme` /
+ * `[lwtheme]` / `prefers-color-scheme` signals rather than hardcoded RGB
+ * triples or attributes that Mozilla renames between versions. And, unlike
+ * the previous revision, they do NOT clobber values a loaded LWT provides.
  */
 export const LEPTON_COMPAT_152_CSS = `
 /* =========================================================================
@@ -73,47 +136,13 @@ export const LEPTON_COMPAT_152_CSS = `
  * Loaded AFTER leptonChrome.css; equal specificity wins by source order.
  * ======================================================================= */
 
-/*= Tab/toolbox variable aliases (the tab rendering fix) ====================
- * Gecko 152 (Project Nova) renamed the tab and toolbox CSS custom properties
- * that Lepton v8.7.x still references by their pre-152 names. With the old
- * names gone, every Lepton rule reading them resolves to the fallback
- * (or to nothing), which is what breaks tab painting in Issue #2489.
- *
- * Renames in 152 (see browser/themes/shared/tabbrowser/tab.tokens.css and
- * tabs.css in the 151 -> 152 runtime diff):
- *   --tab-selected-bgcolor        -> --tab-background-color-selected
- *   --tab-hover-background-color  -> --tab-background-color-hover
- *   --toolbox-bgcolor             -> --toolbox-background-color
- *   --toolbox-bgcolor-inactive    -> --toolbox-background-color-inactive
- *   --tab-selected-textcolor      now references --toolbar-text-color
- *                                  (was --toolbar-color)
- *
- * Rather than patching the 32 Lepton references, re-expose the old names as
- * aliases of the new tokens so Lepton keeps working untouched. The aliases
- * intentionally do NOT use !important: they only supply a value when the
- * old name is otherwise undefined, so anything that legitimately sets the
- * old name still wins. */
-:root {
-  --tab-selected-bgcolor: var(--tab-background-color-selected, var(--toolbar-background-color, var(--toolbar-bgcolor)));
-  --tab-hover-background-color: var(--tab-background-color-hover);
-  --toolbox-bgcolor: var(--toolbox-background-color, var(--toolbar-bgcolor));
-  --toolbox-bgcolor-inactive: var(--toolbox-background-color-inactive, var(--toolbox-background-color, var(--toolbar-bgcolor)));
-}
-/* On Gecko < 152 the new names do not exist; fall the aliases back to the
- * legacy values so the alias block is forward AND backward compatible. */
-@supports not (--tab-background-color-selected: initial) {
-  :root {
-    --tab-selected-bgcolor: var(--toolbar-bgcolor);
-    --tab-hover-background-color: color-mix(in srgb, currentColor 11%, transparent);
-  }
-}
-
-/*= Built-in light/dark theme accent restoration ============================
- * Lepton v8.6.2 keys off the built-in-theme attribute and inline-style
- * exact-RGB substring matchers on :root. On Gecko 152 those signals are
- * unreliable, so Lepton's !important overrides never apply and the chrome
- * falls back to raw defaults. Re-establish Lepton's intended palette using
- * the stable prefers-color-scheme signal instead. */
+/*= Built-in light/dark theme palette restoration ==========================
+ * Lepton keys off the built-in-theme attribute and inline-style exact-RGB
+ * substring matchers on :root. On Gecko 152 those signals are unreliable,
+ * so Lepton's !important overrides never apply and the chrome falls back to
+ * raw defaults. Re-establish Lepton's intended palette using the stable
+ * prefers-color-scheme signal instead — but ONLY for the no-theme case, so a
+ * loaded LWT is never overridden. */
 :root {
   /* Lepton "Original" intended accent colors (mirrors leptonChrome.css) */
   --lepton-compat-accent-light: rgb(229, 229, 235);
@@ -123,76 +152,49 @@ export const LEPTON_COMPAT_152_CSS = `
 }
 
 /* Built-in theme, no LWT loaded: restore Lepton's light palette.
- * Chain both negations on :root (AND) so the rule only applies when NO
- * theme signal is present — ':is(:not(...), :not(...))' was OR logic and
- * matched even when one signal was set. */
+ * Chain both negations on :root (AND) so the rule only applies when NO theme
+ * signal is present. */
 :root:not([lwtheme]):not(:-moz-lwtheme) {
-  --lwt-accent-color: var(--lepton-compat-accent-light) !important;
-  --toolbar-bgcolor: var(--lepton-compat-toolbar-light) !important;
+  --lwt-accent-color: var(--lepton-compat-accent-light);
+  --toolbar-bgcolor: var(--lepton-compat-toolbar-light);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([lwtheme]):not(:-moz-lwtheme) {
-    --lwt-accent-color: var(--lepton-compat-accent-dark) !important;
-    --toolbar-bgcolor: var(--lepton-compat-toolbar-dark) !important;
+    --lwt-accent-color: var(--lepton-compat-accent-dark);
+    --toolbar-bgcolor: var(--lepton-compat-toolbar-dark);
   }
 }
 
 /*= Third-party LWT support (Issue #2489 — "Windows XP modern" etc.) ========
- * Lepton writes fixed-color !important overrides keyed to built-in theme
+ * Lepton writes fixed-color !important overrides keyed to built-in-theme
  * detection. When an LWT is active that detection can partially match and
- * paint the whole chrome a single accent color. Re-allow the theme's own
- * accent/text colors to flow through so the theme author's palette wins. */
+ * paint the whole chrome a single accent color.
+ *
+ * Let the LWT's own values flow by giving the chrome surface a guarded
+ * alias: read the LWT accent first, and only fall back to the toolbar color
+ * when the theme did not provide one. No !important — the LWT author wins. */
 :root:is(:-moz-lwtheme, [lwtheme]) {
-  --lwt-accent-color: var(--lwt-accent-color, revert) !important;
-  --toolbar-bgcolor: var(--toolbar-bgcolor, revert) !important;
+  --lwt-accent-color: var(--lwt-accent-color, var(--toolbar-background-color));
+  --toolbar-bgcolor: var(--toolbar-background-color);
 }
 /* The navigator toolbox background follows --lwt-accent-color in Lepton; make
- * sure it reads the live (possibly LWT-provided) value rather than a stale
- * override captured before the theme loaded. */
+ * sure it reads the live (possibly LWT-provided) value. */
 :root:is(:-moz-lwtheme, [lwtheme]) #navigator-toolbox {
-  background-color: var(--lwt-accent-color) !important;
+  background-color: var(--lwt-accent-color);
 }
 
-/*= Dialog background fix (the "black dialog" symptom) ======================
- * Lepton sets --in-content-page-background to --lwt-accent-color and styles
- * the dialog element against it. When --lwt-accent-color is wrong on 152,
- * dialogs go black. Anchor in-content surfaces to a stable value per color
- * scheme and let LWTs override only when they actually provide one. */
-@media (prefers-color-scheme: light) {
-  :root, :host, dialog {
-    --in-content-page-background: rgb(255, 255, 255) !important;
-  }
-}
-@media (prefers-color-scheme: dark) {
-  :root, :host, dialog {
-    --in-content-page-background: rgb(31, 30, 38) !important;
-  }
-}
-/* LWT-provided in-content background takes precedence when present. */
-:root:is(:-moz-lwtheme, [lwtheme]),
-:root:is(:-moz-lwtheme, [lwtheme]) dialog {
-  --in-content-page-background: var(--lwt-accent-color) !important;
-}
-
-/*= Primary-button accent (Lepton blue) =====================================
+/*= Primary button accent (Lepton blue) =====================================
  * Lepton declares these inside the built-in-theme block that no longer
- * matches on 152. Re-declare them unconditionally so primary buttons keep
- * their blue rather than inheriting a broken accent. */
-:host,
-:root,
-dialog {
-  --in-content-primary-button-text-color: var(--in-content-page-color) !important;
-  --in-content-primary-button-background: var(--blue-60, #0060df) !important;
-  --in-content-primary-button-background-hover: var(--blue-50, #0a84ff) !important;
-  --in-content-primary-button-background-active: var(--blue-40, #4595ff) !important;
-}
-
-/*= Panel / arrowpanel background ===========================================
- * Lepton ties --panel-background to --arrowpanel-background which it also
- * overrides via the broken detection path. Pin it to the chrome surface
- * token so panels match the toolbar. */
-:root:not([lwtheme]):not(:-moz-lwtheme) {
-  --arrowpanel-background: var(--toolbar-bgcolor, -moz-dialog) !important;
+ * matches on 152. Re-declare them for the no-theme case so primary buttons
+ * keep their blue rather than inheriting a broken accent. An LWT that sets
+ * its own button tokens wins by the alias layer + source order. */
+:root:not([lwtheme]):not(:-moz-lwtheme),
+:root:not([lwtheme]):not(:-moz-lwtheme):host,
+:root:not([lwtheme]):not(:-moz-lwtheme) dialog {
+  --in-content-primary-button-text-color: var(--in-content-page-color);
+  --in-content-primary-button-background: var(--blue-60, #0060df);
+  --in-content-primary-button-background-hover: var(--blue-50, #0a84ff);
+  --in-content-primary-button-background-active: var(--blue-40, #4595ff);
 }
 `;
 
@@ -294,10 +296,12 @@ export const FLOORP_ICON_PATCHES = `
 `;
 
 /**
- * Combined compatibility stylesheet injected after Lepton's own sheets.
- * Order within the bundle: (1) Gecko 152 color/theme fixes, then (2) Floorp
- * icon patches. Icons are independent of color fixes so their relative order
- * is not significant, but keeping color fixes first makes the intent clear.
+ * Combined Lepton-family stylesheet: color fix + Lepton-specific compat +
+ * Floorp icon patches. Injected after Lepton's own sheets.
  */
-export const LEPTON_COMPAT_CSS = LEPTON_COMPAT_152_CSS + "\n" +
+export const LEPTON_COMPAT_CSS =
+  GECKO_152_COLOR_FIX_CSS +
+  "\n" +
+  LEPTON_COMPAT_152_CSS +
+  "\n" +
   FLOORP_ICON_PATCHES;

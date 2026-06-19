@@ -19,23 +19,68 @@ import {
   FLUERIAL_TAB_CORNER_CSS,
   TAB_COLOR_LIKE_TOOLBAR_CSS,
 } from "./tab-color-like-toolbar.css.ts";
-// Gecko 152 (Project Nova) compatibility for Lepton + Floorp icon patches.
-// Loaded AFTER Lepton's own sheets so equal-specificity rules win by order.
-import { LEPTON_COMPAT_CSS } from "./lepton-compat-152.css.ts";
+// Gecko 152 (Project Nova) compatibility.
+// GECKO_152_COLOR_FIX_CSS applies to every design (dialogs/panels go black or
+// transparent on 152 regardless of which skin is active); LEPTON_COMPAT_CSS
+// layers on the Lepton-specific palette + Floorp icon patches for the
+// Lepton family. Both load AFTER the skin's own sheets so equal-specificity
+// rules win by source order.
+import {
+  GECKO_152_COLOR_FIX_CSS,
+  LEPTON_COMPAT_CSS,
+} from "./lepton-compat-152.css.ts";
 
-/** Lepton / Photon / ProtonFix: match nav-bar and bookmark bar to selected tab color */
+/**
+ * Lepton / Photon / ProtonFix: match nav-bar and bookmark bar to the toolbar
+ * surface color, so they read as one piece with the selected tab.
+ *
+ * Why this is LWT-aware: under a third-party LWT the theme author often
+ * deliberately differentiates the selected-tab color from the toolbar color
+ * (e.g. a dark green toolbar with a near-white selected tab). Blindly painting
+ * the nav-bar / PersonalToolbar with `--tab-selected-bgcolor` then makes the
+ * bar "float" off the toolbar in the theme's lighter tab color — the bug
+ * reported on Issue #2489. So:
+ *
+ *   - With NO theme loaded (`:not([lwtheme]):not(:-moz-lwtheme)`): Lepton's
+ *     own `userChrome.tab.color_like_toolbar` aligns the tab to the toolbar,
+ *     so reading `--tab-selected-bgcolor` then falling back to the toolbar
+ *     gives the intended Lepton "one surface" look.
+ *   - With an LWT loaded: respect the theme's own toolbar color instead of the
+ *     tab color, so the bar stays anchored to the toolbar the author drew.
+ *
+ * The surface color prefers the Gecko 152 name (`--toolbar-background-color`)
+ * and falls back to the legacy `--toolbar-bgcolor` that older code still sets.
+ */
 const navBarBackgroundColorCSS = `
-#nav-bar,
-#PersonalToolbar {
+/* No theme: paint nav-bar / PersonalToolbar with the selected tab color
+ * (Lepton's color_like_toolbar makes the tab track the toolbar here, so this
+ * is equivalent to the toolbar color while still picking up any per-tab
+ * customization). */
+:root:not([lwtheme]):not(:-moz-lwtheme) #nav-bar,
+:root:not([lwtheme]):not(:-moz-lwtheme) #PersonalToolbar {
   --floorp-chrome-surface-color: var(
     --tab-selected-bgcolor,
+    var(--toolbar-background-color, var(--toolbar-bgcolor))
+  );
+  background-color: var(--floorp-chrome-surface-color) !important;
+  color: var(--toolbar-text-color);
+}
+
+/* LWT loaded: keep nav-bar / PersonalToolbar on the toolbar surface color so
+ * the bar does not float off the toolbar in the theme's (often lighter)
+ * selected-tab color. */
+:root:is(:-moz-lwtheme, [lwtheme]) #nav-bar,
+:root:is(:-moz-lwtheme, [lwtheme]) #PersonalToolbar {
+  --floorp-chrome-surface-color: var(
+    --toolbar-background-color,
     var(--toolbar-bgcolor)
   );
   background-color: var(--floorp-chrome-surface-color) !important;
   color: var(--toolbar-text-color);
 }
 
-/* Lepton paints PersonalToolbar via background-image; override to follow tab color */
+/* Lepton paints PersonalToolbar via background-image; override the image to
+ * follow the same surface color in both cases. */
 #PersonalToolbar {
   background-image: linear-gradient(
       var(--floorp-chrome-surface-color),
@@ -86,6 +131,10 @@ export function getCSSFromConfig(
             fluerialStylesRaw,
             TAB_COLOR_LIKE_TOOLBAR_CSS,
             FLUERIAL_TAB_CORNER_CSS,
+            // Gecko 152 color stabilization (dialog/panel backgrounds). This
+            // is NOT Lepton-specific — fluerial surfaces the same symptoms
+            // once the built-in-theme signals go unreliable on 152.
+            GECKO_152_COLOR_FIX_CSS,
           ],
           iconBasePath: "http://localhost:5174/fluerial/icons",
           userjs: null,
@@ -97,6 +146,7 @@ export function getCSSFromConfig(
           fluerialStylesRaw,
           TAB_COLOR_LIKE_TOOLBAR_CSS,
           FLUERIAL_TAB_CORNER_CSS,
+          GECKO_152_COLOR_FIX_CSS,
         ],
         iconBasePath: getIconBasePath("fluerial"),
         userjs: null,

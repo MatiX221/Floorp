@@ -10,15 +10,16 @@
  *
  * Firefox 152 ("Project Nova", 2026-06-16) renamed a large set of CSS custom
  * properties by dropping the legacy `bgcolor` / `textcolor` / `background`
- * suffixes in favor of the more regular `background-color` / `text-color` /
- * `background-color` forms. Both the definitions and the internal references
- * in mozilla-central moved to the new names.
+ * suffixes in favor of the more regular `background-color` / `text-color`
+ * forms, and folded the `arrowpanel-*` family into the `panel-*` family. Both
+ * the definitions and the internal references in mozilla-central moved to the
+ * new names.
  *
  * Floorp's own chrome components (statusbar, panel-sidebar, workspaces, PWA,
- * split-view, downloadbar, fluerial, command-palette, ui-custom options,
- * ...) still reference the pre-152 names in dozens of places — and the LWT
- * runtime sets `--panel-sidebar-background-color` via `var(--toolbar-bgcolor)`
- * at runtime. With the old names gone on 152, all of those resolve to nothing,
+ * split-view, downloadbar, fluerial, command-palette, ui-custom options, ...)
+ * still reference the pre-152 names in dozens of places — and the LWT runtime
+ * sets `--panel-sidebar-background-color` via `var(--toolbar-bgcolor)` at
+ * runtime. With the old names gone on 152, all of those resolve to nothing,
  * which surfaces as transparent / unstyled surfaces (e.g. the status bar
  * turning transparent — the symptom that prompted this file).
  *
@@ -29,21 +30,32 @@
  * sites, because:
  *   - the rename is mechanical (same semantics, different spelling),
  *   - it keeps the vendored Lepton CSS untouched (update_lepton.yml safe),
- *   - it is forward-compatible: when Gecko eventually drops the old names
- *     entirely the aliases simply no-op, and Floorp can migrate component by
- *     component.
+ *   - it lets Floorp migrate component by component over time.
  *
  * The aliases are declared WITHOUT !important and only set a value when the
  * legacy name is otherwise undefined, so any code that legitimately sets the
- * old name still wins. They are wrapped so they also work on Gecko < 152,
- * where the new names do not exist (the alias then just aliases the legacy
- * name to itself, harmlessly).
+ * old name still wins. **Gecko < 152 is no longer supported**, so there is no
+ * `@supports` / self-referential fallback here — every alias points directly
+ * at the 152 name.
  *
  * ## Where the mapping comes from
  *
- * The 151 -> 152 runtime diff (Floorp-Runtime PR #45), cross-checked against
- * live `getComputedStyle()` measurements on :root (which confirmed which old
- * names are now undefined and which new names carry the value).
+ * The 151 → 152 runtime diff (Floorp-Runtime PR #45), cross-checked against
+ * the 152 source of every defining file:
+ *   - browser/themes/shared/browser-colors.css   (toolbox-* , tab-background-*)
+ *   - browser/themes/shared/tabbrowser/tab.tokens.css  (tab-* tokens)
+ *   - browser/themes/{windows,osx,linux}/browser.css   (toolbar-bgcolor)
+ *   - browser/themes/shared/toolbarbuttons.css  (toolbarbutton-*)
+ *   - toolkit/themes/shared/popup.css           (panel-* / arrowpanel-*)
+ *
+ * ## What is NOT a rename (deliberately absent from the table)
+ *
+ *   - `--toolbar-color` — still defined in 152 (global-shared.css). It is NOT
+ *     `--toolbar-text-color`. Floorp/Lepton components that read
+ *     `--toolbar-color` keep working unaided.
+ *   - `--panel-text-color` — NEW in 152 (popup.css: `--panel-text-color:
+ *     MenuText`). It is not the rename of any 151 token; it is the 152 form
+ *     that the legacy `--arrowpanel-color` now aliases to.
  *
  * ## Injection point
  *
@@ -53,58 +65,75 @@
  */
 
 /**
- * The full alias table. Each entry maps `[legacyName, newName]`. The alias is
- * emitted as `legacyName: var(newName, var(legacyName))` so that:
- *  - on Gecko 152+, where legacyName is undefined but newName is set, the
- *    alias resolves to newName;
- *  - on Gecko < 152, where newName is undefined but legacyName is set, the
- *    alias resolves to legacyName itself (no-op);
- *  - if both are set (transition period), legacyName keeps its own value.
+ * Each entry maps `[legacyName, newName]` where, on Gecko 152, `legacyName`
+ * was removed and `newName` carries the value. The emitted alias is
+ * `legacyName: var(newName)` (no !important, no self-fallback — see module
+ * doc). Custom themes / LWTs that set the *new* name therefore flow through,
+ * and any code that still sets the *old* name wins by source order.
  */
 export const GECKO_152_RENAMED_VARS: ReadonlyArray<
   readonly [string, string]
 > = [
   // Toolbar / toolbox surface colors
+  // browser/themes/{windows,osx,linux}/browser.css
   ["--toolbar-bgcolor", "--toolbar-background-color"],
-  ["--toolbar-color", "--toolbar-text-color"],
+  // browser/themes/shared/browser-colors.css:9-16
   ["--toolbox-bgcolor", "--toolbox-background-color"],
   ["--toolbox-textcolor", "--toolbox-text-color"],
   ["--toolbox-bgcolor-inactive", "--toolbox-background-color-inactive"],
   ["--toolbox-textcolor-inactive", "--toolbox-text-color-inactive"],
 
-  // Tab tokens (also covered by the Lepton compat layer, but Floorp's own
-  // workspaces CSS reads --tab-selected-bgcolor too, so declare globally)
+  // Tab tokens
+  // browser-colors.css:70->75, tab.tokens.css:32->15
   ["--tab-selected-bgcolor", "--tab-background-color-selected"],
-  /* --tab-selected-textcolor was NOT renamed in Gecko 152 — only its referenced
-     value changed from --toolbar-color to --toolbar-text-color (handled below). */
+  // tab.tokens.css:18->14
   ["--tab-hover-background-color", "--tab-background-color-hover"],
 
   // Toolbar buttons
+  // toolbarbuttons.css:768-769 -> 775-776
   ["--toolbarbutton-hover-background", "--toolbarbutton-background-color-hover"],
   [
     "--toolbarbutton-active-background",
     "--toolbarbutton-background-color-active",
   ],
 
-  // Panels / arrow panels (arrowpanel-* were folded into the panel-* family)
+  // Panels / arrow panels (arrowpanel-* folded into panel-* in 152)
+  // toolkit/themes/shared/popup.css:10 -> --panel-background-color
   ["--arrowpanel-background", "--panel-background-color"],
   ["--arrowpanel-color", "--panel-text-color"],
   ["--arrowpanel-border-color", "--panel-border-color"],
+  // The short `--panel-background` (no -color suffix) was also renamed.
   ["--panel-background", "--panel-background-color"],
-  // Note: --panel-text-color was NOT renamed in Gecko 152, so it has no alias
-  // entry — a self-referential `var(--panel-text-color, var(--panel-text-color))`
-  // would be a cyclic no-op.
-  ["--panel-dimmed", "--panel-background-color-dimmed"],
-  ["--panel-dimmed-further", "--panel-background-color-dimmed-further"],
+];
+
+/**
+ * Tokens that are referenced on 152 but NOT defined by it, so they must be
+ * synthesized by Floorp. Each entry is `[name, chain]` and the alias is
+ * emitted as `name: chain` without !important.
+ *
+ * `--toolbar-text-color` is the important one: `tab.tokens.css` on 152 reads
+ * `--tab-selected-textcolor: var(--toolbar-text-color)`, but Mozilla defines
+ * `--toolbar-text-color` nowhere — it is expected to come from the active
+ * theme / LWT / Lepton. On a plain build it is therefore empty and selected
+ * tab text goes unstyled. Alias it to `--toolbar-color` (the 152-surviving
+ * token that actually carries the toolbar text color), letting LWTs that set
+ * `--lwt-text-color` win first.
+ */
+export const GECKO_152_SYNTHESIZED_VARS: ReadonlyArray<
+  readonly [string, string]
+> = [
+  // Prefer an LWT-provided text color, then the surviving toolbar token.
+  ["--toolbar-text-color", "var(--lwt-text-color, var(--toolbar-color))"],
 ];
 
 function buildAliasDeclarations(): string {
-  // `var(newName, var(legacyName))`: prefer the new 152 name, fall back to the
-  // legacy name on older Gecko. No !important — see module doc.
-  const lines = GECKO_152_RENAMED_VARS.map(([legacy, renamed]) =>
-    `  ${legacy}: var(${renamed}, var(${legacy}));`
+  const renamed = GECKO_152_RENAMED_VARS.map(([legacy, renamed]) =>
+    `  ${legacy}: var(${renamed});`
   );
-  return lines.join("\n");
+  const synthesized = GECKO_152_SYNTHESIZED_VARS.map(([name, chain]) =>
+    `  ${name}: ${chain};`
+  );
+  return [...renamed, ...synthesized].join("\n");
 }
 
 /**

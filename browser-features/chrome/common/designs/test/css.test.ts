@@ -137,7 +137,48 @@ function testLeptonPhotonProtonfixNavBarCssIncludesPersonalToolbar(): void {
     );
     assert(
       css.includes("--tab-selected-bgcolor"),
-      `${theme} navBar CSS should follow selected tab color`,
+      `${theme} navBar CSS should follow selected tab color in the no-theme case`,
+    );
+  }
+}
+
+/**
+ * Regression for Issue #2489: under a third-party LWT the nav-bar /
+ * PersonalToolbar must follow the TOOLBAR color, not the (often lighter)
+ * selected-tab color — otherwise the bar "floats" off the toolbar. The
+ * navBar CSS must therefore branch on the LWT signal.
+ */
+function testNavBarCssIsLwtAware(): void {
+  for (const theme of ["lepton", "photon", "protonfix"] as const) {
+    const css = getChromeInlineCss(theme);
+    // The LWT case must scope the nav-bar/PersonalToolbar to the toolbar
+    // surface color, not the tab color.
+    assert(
+      /:root:is\(:-moz-lwtheme,\s*\[lwtheme\]\)\s+#nav-bar/.test(css),
+      `${theme} navBar CSS must scope #nav-bar to the toolbar color under LWT`,
+    );
+    assert(
+      /:root:is\(:-moz-lwtheme,\s*\[lwtheme\]\)\s+#PersonalToolbar/.test(css),
+      `${theme} navBar CSS must scope #PersonalToolbar to the toolbar color under LWT`,
+    );
+    // The LWT branch must read the toolbar color, NOT --tab-selected-bgcolor.
+    // The LWT rules form one selector group: `:root:is(...) #nav-bar,
+    // :root:is(...) #PersonalToolbar { ... }`. Extract that single block.
+    const lwtBlockMatch = css.match(
+      /:root:is\(:-moz-lwtheme,\s*\[lwtheme\]\)\s+#nav-bar,[\s\S]*?\}/,
+    );
+    const lwtBlock = lwtBlockMatch ? lwtBlockMatch[0] : "";
+    assert(
+      lwtBlock !== "",
+      `${theme} navBar CSS must have an LWT-scoped selector group for #nav-bar`,
+    );
+    assert(
+      lwtBlock.includes("--toolbar-background-color"),
+      `${theme} LWT navBar branch must read --toolbar-background-color`,
+    );
+    assert(
+      !lwtBlock.includes("--tab-selected-bgcolor"),
+      `${theme} LWT navBar branch must NOT read --tab-selected-bgcolor (that is what floats the bar off the toolbar under LWT)`,
     );
   }
 }
@@ -278,6 +319,10 @@ export async function runAllTests(): Promise<void> {
     {
       name: "lepton/photon/protonfix navBar CSS includes PersonalToolbar",
       fn: testLeptonPhotonProtonfixNavBarCssIncludesPersonalToolbar,
+    },
+    {
+      name: "lepton/photon/protonfix navBar CSS is LWT-aware",
+      fn: testNavBarCssIsLwtAware,
     },
     // photon
     { name: "photon returns userjs", fn: testPhotonReturnsUserjs },
