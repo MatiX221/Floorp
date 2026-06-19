@@ -33,11 +33,14 @@
  *     entirely the aliases simply no-op, and Floorp can migrate component by
  *     component.
  *
- * The aliases are declared WITHOUT !important and only set a value when the
- * legacy name is otherwise undefined, so any code that legitimately sets the
- * old name still wins. They are wrapped so they also work on Gecko < 152,
- * where the new names do not exist (the alias then just aliases the legacy
- * name to itself, harmlessly).
+ * The aliases are declared WITH !important. Gecko 152's own UA sheet pins the
+ * renamed legacy names (e.g. --toolbar-bgcolor) to an empty value with
+ * !important, so a plain `--toolbar-bgcolor: var(...)` is overridden and the
+ * alias silently does nothing (verified live: only an !important author rule
+ * revives the value). The !important is safe because the alias only chains to
+ * the new token (or falls back to the legacy name on Gecko < 152, harmlessly
+ * aliasing it to itself); any code that sets the new name still wins because
+ * the alias reads its value rather than clobbering it.
  *
  * ## Where the mapping comes from
  *
@@ -100,9 +103,11 @@ export const GECKO_152_RENAMED_VARS: ReadonlyArray<
 
 function buildAliasDeclarations(): string {
   // `var(newName, var(legacyName))`: prefer the new 152 name, fall back to the
-  // legacy name on older Gecko. No !important — see module doc.
+  // legacy name on older Gecko. !important is required: Gecko 152's UA sheet
+  // pins the renamed legacy names to empty with !important, so without it the
+  // alias is overridden and resolves to nothing (Issue #2491).
   const lines = GECKO_152_RENAMED_VARS.map(([legacy, renamed]) =>
-    `  ${legacy}: var(${renamed}, var(${legacy}));`
+    `  ${legacy}: var(${renamed}, var(${legacy})) !important;`
   );
   return lines.join("\n");
 }

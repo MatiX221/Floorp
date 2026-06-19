@@ -28,11 +28,14 @@ const navBarBackgroundColorCSS = `
 #nav-bar,
 #PersonalToolbar {
   --floorp-chrome-surface-color: var(
-    --tab-selected-bgcolor,
-    var(--toolbar-bgcolor)
+    --tab-background-color-selected,
+    var(
+      --tab-selected-bgcolor,
+      var(--toolbar-background-color, var(--toolbar-bgcolor))
+    )
   );
   background-color: var(--floorp-chrome-surface-color) !important;
-  color: var(--toolbar-text-color);
+  color: var(--toolbar-text-color, var(--toolbar-color));
 }
 
 /* Lepton paints PersonalToolbar via background-image; override to follow tab color */
