@@ -439,6 +439,29 @@ function injectFloorpHubWarningStyles(): void {
     #${FLOORP_START_WARNING_IDS?.container ?? "floorp-start-warning"} .floorp-hub-warning__button:hover {
       background-color: #3390ff;
     }
+
+    /*
+     * Hide Floorp Start-related groups inside the redesigned Home pane when
+     * the body has the "floorp-start-active" flag (set in JS below). This is
+     * CSS-driven so it survives Lit re-renders of <setting-group>, which
+     * would otherwise drop the "hidden" attribute we set imperatively.
+     * Only the homepage / Firefox Home content groups are hidden; the
+     * "startupHome" and "defaultBrowserHome" groups remain available.
+     */
+    body.floorp-start-active setting-pane[data-category="paneHome"] setting-group[groupid="homepage"],
+    body.floorp-start-active setting-pane[data-category="paneHome"] setting-group[groupid="home"] {
+      display: none !important;
+    }
+
+    /*
+     * Legacy (non-redesign) Home pane: hide the homepage / Firefox Home
+     * content sections only.
+     */
+    body.floorp-start-active #homepageGroup,
+    body.floorp-start-active #homeContentsGroup,
+    body.floorp-start-active #firefoxHomeCategory {
+      display: none !important;
+    }
   `;
 
   const parent =
@@ -824,24 +847,174 @@ function getI18nUtils(): {
   return i18nUtilsInstance ?? null;
 }
 
-function hideNewTabPage(): void {
-  const pref = Services.prefs.getStringPref("floorp.design.configs");
-  const config = JSON.parse(pref).uiCustomization.disableFloorpStart;
+// Whether the redesigned settings UI (browser.settings-redesign.enabled)
+// is active. Firefox 152 ships it on by default; under the redesign the
+// Home pane is rendered with <setting-pane>/<setting-group> elements and
+// additionally contains the "startup" and "default browser" groups, which
+// are unrelated to Floorp Start and must NOT be hidden.
+function isSettingsRedesignEnabled(): boolean {
+  try {
+    return Services.prefs.getBoolPref(
+      "browser.settings-redesign.enabled",
+      false,
+    );
+  } catch {
+    return false;
+  }
+}
 
-  if (!config) {
-    logFloorpHub("Disabling Floorp start categories as per configuration.");
-    doc
-      .querySelectorAll('#category-home, [data-category="paneHome"]')
-      .forEach((el: Element) => {
-        el.remove();
-      });
+// Read the Floorp Start toggle. Returns true when Floorp Start is active
+// (i.e. uiCustomization.disableFloorpStart is falsy).
+function isFloorpStartEnabled(): boolean {
+  try {
+    const pref = Services.prefs.getStringPref("floorp.design.configs");
+    const config = JSON.parse(pref)?.uiCustomization?.disableFloorpStart;
+    return !config;
+  } catch {
+    // On malformed/missing config, treat Floorp Start as enabled (default).
+    return true;
+  }
+}
+
+// Group ids rendered inside the redesigned paneHome that belong to the
+// Floorp Start / Firefox Home surface and therefore should be hidden when
+// Floorp Start is active. "startupHome" and "defaultBrowserHome" are
+// intentionally excluded — they are generic browser startup settings.
+const FLOORP_START_RELATED_GROUP_IDS = ["homepage", "home"] as const;
+
+// CSS class applied to <body> when Floorp Start is active. Matching rules
+// in injectFloorpHubWarningStyles() hide the related Home groups via CSS,
+// which is robust against Lit re-rendering the <setting-group> elements.
+const FLOORP_START_ACTIVE_CLASS = "floorp-start-active";
+
+// Id selectors of the legacy (non-redesign) Home pane sections that are
+// specific to the homepage / Firefox Home content.
+const FLOORP_START_RELATED_LEGACY_IDS = [
+  "#homepageGroup",
+  "#homeContentsGroup",
+  "#firefoxHomeCategory",
+] as const;
+
+function hideFloorpStartLegacyHomePane(): void {
+  // Legacy UI: remove only the homepage / Firefox Home content sections as
+  // a fallback in case the CSS rule did not apply (e.g. styles not yet
+  // injected). The pane itself is shared with nothing else.
+  for (const selector of FLOORP_START_RELATED_LEGACY_IDS) {
+    doc.querySelector(selector)?.remove();
+  }
+}
+
+// Relocate the Floorp Start warning banner so it shows up directly above
+// the remaining Home pane content (startup/default-browser groups) under
+// the redesign, where it is most meaningful to the user.
+function moveStartWarningAboveHomeGroups(): void {
+  if (!isSettingsRedesignEnabled()) return;
+  const warning = doc.getElementById(FLOORP_START_WARNING_IDS.container);
+  const homePane = doc.querySelector(
+    'setting-pane[data-category="paneHome"]',
+  );
+  if (!warning || !homePane) return;
+  const firstRemaining = homePane.querySelector(
+    "setting-group:not([hidden])",
+  );
+  if (firstRemaining && firstRemaining.parentElement) {
+    firstRemaining.parentElement.insertBefore(warning, firstRemaining);
+  }
+}
+
+function hideNewTabPage(): void {
+  const startEnabled = isFloorpStartEnabled();
+
+  // Toggle the body class that drives the CSS hiding rules. This is the
+  // primary mechanism and survives Lit re-renders.
+  doc.body?.classList.toggle(FLOORP_START_ACTIVE_CLASS, startEnabled);
+
+  if (!startEnabled) {
+    ensureFloorpHubWarning();
+    return;
+  }
+
+  logFloorpHub("Hiding Floorp Start-related Home settings as configured.");
+
+  if (isSettingsRedesignEnabled()) {
+    // Belt-and-suspenders: also set the hidden attribute on any groups
+    // currently present. The MutationObserver keeps this in sync.
+    const homePane = doc.querySelector(
+      'setting-pane[data-category="paneHome"]',
+    );
+    if (homePane) {
+      for (const groupId of FLOORP_START_RELATED_GROUP_IDS) {
+        homePane
+          .querySelector(`setting-group[groupid="${groupId}"]`)
+          ?.setAttribute("hidden", "true");
+      }
+      moveStartWarningAboveHomeGroups();
+    }
+  } else {
+    hideFloorpStartLegacyHomePane();
   }
 
   ensureFloorpHubWarning();
+}
+
+// Under the redesigned settings UI, the <setting-pane data-category="paneHome">
+// element and its child <setting-group>s are created asynchronously after
+// DOMContentLoaded, and the legacy "home-pane-loaded" observer notification
+// is no longer emitted (gHomePane.init() returns early). Watch the document
+// so we re-apply the hidden attribute as a secondary measure whenever the
+// pane materializes. CSS (driven by the body class) is the source of truth.
+let floorpStartObserver: MutationObserver | null = null;
+
+function startFloorpStartObserver(): void {
+  if (floorpStartObserver) return;
+  floorpStartObserver = new (doc.defaultView as unknown as {
+    MutationObserver: typeof MutationObserver;
+  }).MutationObserver(() => {
+    if (!isFloorpStartEnabled() || !isSettingsRedesignEnabled()) return;
+    const homePane = doc.querySelector(
+      'setting-pane[data-category="paneHome"]',
+    );
+    if (!homePane) return;
+    for (const groupId of FLOORP_START_RELATED_GROUP_IDS) {
+      const group = homePane.querySelector(
+        `setting-group[groupid="${groupId}"]`,
+      );
+      if (group && !group.hasAttribute("hidden")) {
+        group.setAttribute("hidden", "true");
+      }
+    }
+  });
+  const target = doc.getElementById("mainPrefPane") ?? doc.body;
+  if (target) {
+    floorpStartObserver.observe(target, {
+      childList: true,
+      subtree: true,
+    });
+  }
+}
+
+function initHideNewTabPage(): void {
+  const run = (): void => {
+    hideNewTabPage();
+    startFloorpStartObserver();
+  };
+
+  if (doc.readyState === "loading") {
+    doc.addEventListener("DOMContentLoaded", run, { once: true });
+  } else {
+    run();
+  }
+
+  // Legacy UI relies on this notification; harmless under the redesign.
+  try {
+    Services.obs.addObserver(hideNewTabPage, "home-pane-loaded");
+  } catch (error) {
+    console.error("[Floorp Hub]", "Failed to add home-pane-loaded observer", error);
+  }
 }
 
 ensureI18NInitialized();
 addFloorpHubCategory();
 ensureFloorpHubWarning();
 ensureFloorpStartWarning();
-Services.obs.addObserver(hideNewTabPage, "home-pane-loaded");
+initHideNewTabPage();
