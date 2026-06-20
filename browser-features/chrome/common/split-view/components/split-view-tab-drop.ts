@@ -28,6 +28,7 @@ import {
 } from "../patches/session-restore.js";
 import { applyLayout } from "../layout.js";
 import { forceCleanupDragState } from "../utils/force-cleanup.js";
+import { scheduleSequentialSplitTabSelectionForLoad } from "../patches/activate-split-pane-browsers.js";
 
 const TAB_DROP_TYPE = "application/x-moz-tabbrowser-tab";
 const NEW_WINDOW_ZONE_ID = "floorp-new-window-drop-zone";
@@ -591,6 +592,17 @@ function runDeferredSplitViewCreation(creation: PendingSplitViewCreation): void 
     }
   } catch (err) {
     logger.error("[tab-drop] Error in deferred drop handler:", err);
+  }
+
+  // After a split view is created or extended via tab drag-and-drop, the
+  // newly-added browser is often left with docShellIsActive unset ( Gecko's
+  // AsyncTabSwitcher has not run its normal requestTab path for it). When that
+  // happens the remote browser's context-menu request never reaches the chrome
+  // process, so right-clicking the web content does nothing. Briefly selecting
+  // each pane in turn runs the normal tab-switch path and activates every
+  // docShell (verified on-device), restoring context menus and interaction.
+  if (gBrowser.activeSplitView) {
+    scheduleSequentialSplitTabSelectionForLoad(logger);
   }
 }
 
