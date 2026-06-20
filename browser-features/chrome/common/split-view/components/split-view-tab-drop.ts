@@ -47,6 +47,31 @@ let logger: ConsoleInstance | null = null;
 let dragLeaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * Pending split-view creation captured at drop time. Split-view creation is
+ * deferred until after the native `dragend` runs so that Firefox's own
+ * post-drag cleanup (`finishAnimateTabMove` clearing per-tab `transform`s,
+ * `_resetTabsAfterDrop` clearing per-tab inline styles, and `delete
+ * _dragData`) has completed first. Without this ordering, the transforms
+ * applied by `_animateTabMove` during an intra-tabstrip reorder linger on
+ * the tabs as they are moved into the wrapper, corrupting the tab bar
+ * layout (Issue: split view created after nudging a tab inside the tab
+ * strip renders with a stale positional offset).
+ */
+interface PendingSplitViewCreation {
+  tab: SplitViewTab;
+  zone: DropZone;
+}
+let pendingCreation: PendingSplitViewCreation | null = null;
+/**
+ * Fallback timer that flushes `pendingCreation` if the native `dragend`
+ * never arrives within the same drag gesture. `dragend` is the expected
+ * flush path, but it can be dropped (Firefox Bugzilla #656164); without a
+ * fallback the split view would silently never be created in that case.
+ */
+const PENDING_CREATION_FALLBACK_MS = 100;
+let pendingCreationFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
  * Watchdog: if `data-floorp-tab-dragging` (or any sibling drag attribute)
  * lingers on tabpanels for more than this duration without a fresh dragover,
  * we assume the drag's terminal events (dragend/drop) were lost and force a
@@ -61,6 +86,84 @@ const t = (key: string, opts?: Record<string, string>): string =>
 
 function getTabpanels(): HTMLElement | null {
   return document?.getElementById("tabbrowser-tabpanels") as HTMLElement | null;
+}
+
+/**
+ * Finish the visual side of Firefox's native tab-drag move that
+ * `finishAnimateTabMove` would normally handle.
+ *
+ * Background: when a tab is nudged within the tab strip during a drag,
+ * `_animateTabMove` (drag-and-drop.js) sets `style.transform` on the dragged
+ * tab *and its neighbours*, and the drag-over-a-group path sets the
+ * `movingtab-group` / `movingtab-addToGroup` attributes plus the
+ * `--dragover-tab-group-color*` CSS variables (the blue "drop here to group"
+ * indicator) and a `dragover-groupTarget` attribute on the hovered tab. All of
+ * these are normally cleared by native `finishAnimateTabMove`, which is itself
+ * gated on the `movingtab` attribute (`if (!this.#isMovingTab()) return;`).
+ *
+ * The split-view tab-drop path interferes with that cleanup:
+ *   - `onDrop` runs `cleanup()` → `forceCleanupDragState()`, which removes the
+ *     `movingtab` attribute as a safety net against leaked `pointer-events:none`;
+ *   - later, native `dragend` → `handle_dragend` → `finishAnimateTabMove` sees
+ *     `movingtab` already gone and returns early, so NONE of the visual state
+ *     is cleared — per-tab `transform`s, the blue group indicator, etc.
+ *   - when `addTabSplitView` then moves those tabs into the wrapper, the stale
+ *     `transform` travels with them (positional offset bug) and the group
+ *     indicator keeps painting over the tab strip.
+ *
+ * Calling this immediately before `addTabSplitView`/`addTabs` reproduces the
+ * cleanup `finishAnimateTabMove` would have done (drag-and-drop.js: clearing
+ * `transform` + `dragover-groupTarget` on every `dragAndDropElement`, removing
+ * the `movingtab-group` / `movingtab-ungroup` / `movingtab-addToGroup`
+ * attributes, and dropping the `--dragover-tab-group-color*` CSS variables), so
+ * no drag visuals survive into the wrapper — regardless of whether the native
+ * function actually ran.
+ */
+function finishNativeTabMoveVisuals(): void {
+  const tabContainer = getGBrowser()?.tabContainer as
+    | (HTMLElement & {
+        tabDragAndDrop?: {
+          _tabbrowserTabs?: HTMLElement & {
+            dragAndDropElements?: Iterable<HTMLElement>;
+          };
+        };
+      })
+    | undefined;
+  const tbts = tabContainer?.tabDragAndDrop?._tabbrowserTabs;
+
+  // Prefer Firefox's own dragAndDropElements list — it is exactly the set
+  // `_animateTabMove` applied transforms to (tabs AND split-view wrappers).
+  const dde = tbts?.dragAndDropElements;
+  let items: HTMLElement[];
+  if (dde) {
+    items = Array.from(dde);
+  } else {
+    // Fallback: sweep all tabbrowser-tabs and split-view wrappers in the strip.
+    const all = document?.querySelectorAll(
+      ".tabbrowser-tab, tab-split-view-wrapper",
+    );
+    items = all ? (Array.from(all) as HTMLElement[]) : [];
+  }
+  for (const item of items) {
+    // _animateTabMove's translate; also clear dragover-groupTarget (native
+    // _resetGroupTarget) for any tab that was the hovered grouping target.
+    if (item.style.transform) {
+      item.style.transform = "";
+    }
+    item.removeAttribute("dragover-groupTarget");
+  }
+
+  if (tbts) {
+    // Native finishAnimateTabMove attribute cleanup.
+    tbts.removeAttribute("movingtab-group");
+    tbts.removeAttribute("movingtab-ungroup");
+    tbts.removeAttribute("movingtab-addToGroup");
+    // Native _setDragOverGroupColor(null): drop the blue group-indicator CSS
+    // variables, which otherwise keep painting over the tab strip.
+    tbts.style.removeProperty("--dragover-tab-group-color");
+    tbts.style.removeProperty("--dragover-tab-group-color-invert");
+    tbts.style.removeProperty("--dragover-tab-group-color-pale");
+  }
 }
 
 /**
@@ -346,113 +449,179 @@ function onDrop(event: DragEvent): void {
     return;
   }
 
-  // Save state before cleanup — split view creation is deferred so that
-  // Firefox's handle_dragend (finishAnimateTabMove, _resetTabsAfterDrop)
-  // completes its cleanup first.  Without this delay, handle_dragend resets
-  // drag transforms AFTER we've already moved tabs into the wrapper,
-  // corrupting the tab bar layout.
+  // Save state before cleanup — split view creation is deferred until after
+  // Firefox's native `dragend` runs (see `pendingCreation` /
+  // `flushPendingCreationOnDragEnd`). The native `handle_dragend` calls
+  // `finishAnimateTabMove` (clearing per-tab `transform`s set by
+  // `_animateTabMove`) and `_resetTabsAfterDrop` (clearing per-tab inline
+  // styles) and deletes `_dragData`. If we move tabs into the wrapper before
+  // that cleanup runs — which happens whenever the tab was nudged within the
+  // tab strip, so `_animateTabMove` set transforms on it and its neighbours —
+  // those transforms linger and the tab bar renders with a stale positional
+  // offset. Deferring until the real `dragend` event guarantees native
+  // cleanup has completed first.
   const zone = activeZone;
   const tab = draggedTab;
 
   cleanup();
 
-  setTimeout(() => {
-    // Guard: if tab was closed or destroyed between cleanup and this deferred callback,
-    // skip all operations to avoid acting on stale state.
-    if (!tab.linkedBrowser) return;
-    if (!logger) return;
+  pendingCreation = { tab, zone };
+  // Safety net: `dragend` is the primary flush path, but it can be dropped
+  // (Firefox Bugzilla #656164). If it never arrives, flush after a short
+  // grace period so the split view is still created. The timer is cleared on
+  // the normal `dragend` path.
+  if (pendingCreationFlushTimer) clearTimeout(pendingCreationFlushTimer);
+  pendingCreationFlushTimer = setTimeout(() => {
+    pendingCreationFlushTimer = null;
+    if (!pendingCreation) return;
+    logger?.warn(
+      "[tab-drop] dragend not received within grace period — flushing " +
+        "pending split view creation via fallback timer",
+    );
+    flushPendingCreationOnDragEnd();
+  }, PENDING_CREATION_FALLBACK_MS);
+}
 
-    // Re-query the current split view state rather than using the pre-cleanup
-    // snapshot — the wrapper may have been destroyed or mutated by Firefox's
-    // own drag-end handling that ran between cleanup() and this callback.
-    const currentSplitView = findExistingSplitView();
-    const currentMaxPanes = splitViewConfig().maxPanes;
+/**
+ * Actually create (or extend) the split view for the captured drop. Extracted
+ * from `onDrop` so it can run from the `dragend` handler after native cleanup.
+ */
+function runDeferredSplitViewCreation(creation: PendingSplitViewCreation): void {
+  const { tab, zone } = creation;
+  // Guard: if tab was closed or destroyed between cleanup and this deferred callback,
+  // skip all operations to avoid acting on stale state.
+  if (!tab.linkedBrowser) return;
+  if (!logger) return;
 
-    try {
-      if (tab.splitview) return;
+  const gBrowser = getGBrowser();
+  if (!gBrowser) return;
 
-      // Center zone: add pane to existing split view, or create new with default layout
-      if (zone === "center") {
-        if (currentSplitView && currentSplitView.tabs.length < currentMaxPanes) {
-          currentSplitView.addTabs([tab]);
-          const newPaneCount = currentSplitView.tabs.length;
-          if (newPaneCount === 3) {
-            const gridLayout = "grid-3pane-right-main";
-            const groupId = getActiveSplitViewGroupId();
-            if (groupId) {
-              setPersistedGroupLayout(groupId, gridLayout);
-            }
-            applyLayout(logger);
-          } else if (newPaneCount === 4) {
-            const groupId = getActiveSplitViewGroupId();
-            if (groupId) {
-              setPersistedGroupLayout(groupId, "grid-2x2");
-            }
-            applyLayout(logger);
+  // CRITICAL: finish the native tab-move visuals BEFORE moving tabs into the
+  // wrapper. This runs from the `dragend` handler, but native
+  // `finishAnimateTabMove` may have been skipped because `cleanup()` →
+  // `forceCleanupDragState()` already removed the `movingtab` attribute that
+  // gates it (`if (!this.#isMovingTab()) return;`). Without this sweep, stale
+  // `transform`s travel into the wrapper (positional offset) and the blue
+  // drag-over-group indicator keeps painting over the tab strip.
+  finishNativeTabMoveVisuals();
+
+  // Re-query the current split view state rather than using the pre-cleanup
+  // snapshot — the wrapper may have been destroyed or mutated by Firefox's
+  // own drag-end handling that ran between cleanup() and this callback.
+  const currentSplitView = findExistingSplitView();
+  const currentMaxPanes = splitViewConfig().maxPanes;
+
+  try {
+    if (tab.splitview) return;
+
+    // Center zone: add pane to existing split view, or create new with default layout
+    if (zone === "center") {
+      if (currentSplitView && currentSplitView.tabs.length < currentMaxPanes) {
+        currentSplitView.addTabs([tab]);
+        const newPaneCount = currentSplitView.tabs.length;
+        if (newPaneCount === 3) {
+          const gridLayout = "grid-3pane-right-main";
+          const groupId = getActiveSplitViewGroupId();
+          if (groupId) {
+            setPersistedGroupLayout(groupId, gridLayout);
           }
-        } else if (!currentSplitView) {
-          const partnerTab = findLastActivePartnerTab(gBrowser, tab);
-          if (!partnerTab) return;
-          if (partnerTab.splitview) {
-            const existingWrapper = partnerTab.splitview as unknown as SplitViewWrapper;
-            if (existingWrapper.tabs.length < currentMaxPanes) {
-              existingWrapper.addTabs([tab]);
-              // Apply grid-3pane layout for 2→3 pane transition on center drop
-              const newPaneCount = existingWrapper.tabs.length;
-              if (newPaneCount === 3) {
-                const groupId = getActiveSplitViewGroupId();
-                if (groupId) {
-                  setPersistedGroupLayout(groupId, "grid-3pane-right-main");
-                }
-              }
-              applyLayout(logger);
-            }
-          } else {
-            const wrapper = gBrowser.addTabSplitView([partnerTab, tab]);
-            if (wrapper) {
-              applyLayout(logger);
-            }
+          applyLayout(logger);
+        } else if (newPaneCount === 4) {
+          const groupId = getActiveSplitViewGroupId();
+          if (groupId) {
+            setPersistedGroupLayout(groupId, "grid-2x2");
           }
+          applyLayout(logger);
         }
-        return;
-      }
-
-      // Edge zones: add to existing split view if partner is in one,
-      // otherwise create a new split view with the most recently active tab.
-      {
+      } else if (!currentSplitView) {
         const partnerTab = findLastActivePartnerTab(gBrowser, tab);
         if (!partnerTab) return;
         if (partnerTab.splitview) {
           const existingWrapper = partnerTab.splitview as unknown as SplitViewWrapper;
           if (existingWrapper.tabs.length < currentMaxPanes) {
             existingWrapper.addTabs([tab]);
-            const layout = computeLayoutForExistingSplit(zone, existingWrapper.tabs.length - 1);
-            if (layout) {
+            // Apply grid-3pane layout for 2→3 pane transition on center drop
+            const newPaneCount = existingWrapper.tabs.length;
+            if (newPaneCount === 3) {
               const groupId = getActiveSplitViewGroupId();
-              if (groupId) setPersistedGroupLayout(groupId, layout);
+              if (groupId) {
+                setPersistedGroupLayout(groupId, "grid-3pane-right-main");
+              }
             }
             applyLayout(logger);
           }
         } else {
-          const layout = zoneToLayout(zone);
-          const [first, second] = zoneToTabOrder(zone, partnerTab, tab);
-          const wrapper = gBrowser.addTabSplitView([first, second]);
+          const wrapper = gBrowser.addTabSplitView([partnerTab, tab]);
           if (wrapper) {
-            const groupId = getActiveSplitViewGroupId();
-            if (groupId) {
-              setPersistedGroupLayout(groupId, layout);
-            }
             applyLayout(logger);
           }
         }
       }
-    } catch (err) {
-      logger.error("[tab-drop] Error in deferred drop handler:", err);
+      return;
     }
-  }, 0);
+
+    // Edge zones: add to existing split view if partner is in one,
+    // otherwise create a new split view with the most recently active tab.
+    {
+      const partnerTab = findLastActivePartnerTab(gBrowser, tab);
+      if (!partnerTab) return;
+      if (partnerTab.splitview) {
+        const existingWrapper = partnerTab.splitview as unknown as SplitViewWrapper;
+        if (existingWrapper.tabs.length < currentMaxPanes) {
+          existingWrapper.addTabs([tab]);
+          const layout = computeLayoutForExistingSplit(zone, existingWrapper.tabs.length - 1);
+          if (layout) {
+            const groupId = getActiveSplitViewGroupId();
+            if (groupId) setPersistedGroupLayout(groupId, layout);
+          }
+          applyLayout(logger);
+        }
+      } else {
+        const layout = zoneToLayout(zone);
+        const [first, second] = zoneToTabOrder(zone, partnerTab, tab);
+        const wrapper = gBrowser.addTabSplitView([first, second]);
+        if (wrapper) {
+          const groupId = getActiveSplitViewGroupId();
+          if (groupId) {
+            setPersistedGroupLayout(groupId, layout);
+          }
+          applyLayout(logger);
+        }
+      }
+    }
+  } catch (err) {
+    logger.error("[tab-drop] Error in deferred drop handler:", err);
+  }
+}
+
+/**
+ * Flush any pending split-view creation captured at drop time. Called from
+ * the `dragend` handler so that Firefox's native post-drag cleanup
+ * (`finishAnimateTabMove` / `_resetTabsAfterDrop`) has already run, which
+ * prevents stale per-tab `transform`s from lingering on tabs as they are
+ * moved into the wrapper.
+ */
+function flushPendingCreationOnDragEnd(): void {
+  if (!pendingCreation) return;
+  if (pendingCreationFlushTimer) {
+    clearTimeout(pendingCreationFlushTimer);
+    pendingCreationFlushTimer = null;
+  }
+  const creation = pendingCreation;
+  pendingCreation = null;
+  runDeferredSplitViewCreation(creation);
 }
 
 function onDragEnd(): void {
+  // Run deferred split-view creation FIRST, before cleanup(), so that it
+  // executes in the same `dragend` task — after native `handle_dragend` has
+  // cleared transforms/inline-styles via `finishAnimateTabMove` and
+  // `_resetTabsAfterDrop`. `dragend` is the only reliable signal that the
+  // native drag is truly over and its cleanup has completed; using a plain
+  // `setTimeout(0)` instead races against that cleanup when the tab was
+  // nudged within the tab strip.
+  flushPendingCreationOnDragEnd();
+
   cleanup();
   // Belt-and-suspenders: ensure Firefox's "movingtab" attribute is cleared.
   // handle_dragend normally does this, but if the dragged tab was consumed
@@ -525,10 +694,20 @@ function cleanup(): void {
     clearTimeout(dragLeaveTimer);
     dragLeaveTimer = null;
   }
+  if (pendingCreationFlushTimer) {
+    clearTimeout(pendingCreationFlushTimer);
+    pendingCreationFlushTimer = null;
+  }
   clearStuckDragWatchdog();
   isTabDragging = false;
   draggedTabAtStart = null;
   activeZone = "right";
+  // Drop the pending split-view creation. It is only flushed from `dragend`
+  // (see `onDragEnd`) or its fallback timer; if we reach `cleanup()` another
+  // way — e.g. the stuck-drag watchdog, a global mouseup/blur safety net, or
+  // detach-to-window where the tab is gone — the drag was abandoned and no
+  // split view should be created.
+  pendingCreation = null;
   removeDropOverlay();
   removeNewWindowZone();
   // Belt-and-suspenders: clear every drag-related attribute and overlay
