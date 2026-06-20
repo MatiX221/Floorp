@@ -70,13 +70,28 @@ import {
  * must follow the SAME token to stay visually flush with the selected tab.
  * Therefore the chain prefers `--toolbar-bgcolor` first and only falls back to
  * `--toolbar-background-color` when the legacy token is unset.
+ *
+ * LWT background images (Issue #2489 follow-up): a Lightweight Theme with
+ * `additional_backgrounds` (Alpenglow, colorways, community themes, …) draws
+ * its artwork on `<body>` via `--lwt-additional-images` (see Firefox's
+ * browser-shared.css). Firefox keeps `.browser-toolbar` translucent so that
+ * the body artwork shows through. Floorp must NOT repaint these toolbars with
+ * an opaque surface color under LWT, or the theme background disappears and
+ * the chrome collapses to a single solid color — exactly the symptom reported
+ * when an LWT with a background is active. Therefore the opaque surface fill
+ * below applies ONLY to the no-theme case. Under LWT the bars keep Firefox's
+ * translucent toolbar color and let the artwork show through.
  */
 export const navBarBackgroundColorCSS = `
 /* No theme loaded (default-theme, built-in Light/Dark, etc.): paint nav-bar /
  * PersonalToolbar with the selected tab color. Lepton's color_like_toolbar
  * unsets --tab-selected-bgcolor, so this resolves to --toolbar-bgcolor -- the
  * exact token that paints the selected .tab-background -- keeping the bars
- * flush with the active tab. */
+ * flush with the active tab.
+ *
+ * NOTE: this opaque fill is deliberately scoped to :root:not([lwtheme]).
+ * A loaded LWT draws its background artwork on <body> and relies on the
+ * toolbars being translucent; painting them opaquely would hide the artwork. */
 :root:not([lwtheme]) #nav-bar,
 :root:not([lwtheme]) #PersonalToolbar {
   --floorp-chrome-surface-color: var(
@@ -87,31 +102,35 @@ export const navBarBackgroundColorCSS = `
   color: var(--toolbar-text-color);
 }
 
-/* Third-party LWT loaded ([lwtheme] is set): keep nav-bar / PersonalToolbar on
- * the toolbar surface color so the bar does not float off the toolbar in the
- * theme's (often lighter) selected-tab color. --toolbar-bgcolor is preferred
- * because the LWT sets it to its own toolbar color, which is what the selected
- * tab tracks under LWT as well. */
-:root[lwtheme] #nav-bar,
-:root[lwtheme] #PersonalToolbar {
+/* Third-party LWT loaded ([lwtheme] is set): do NOT force an opaque surface
+ * color onto nav-bar / PersonalToolbar. Firefox paints the LWT background
+ * artwork on <body> via --lwt-additional-images and keeps these toolbars
+ * translucent so the artwork shows through. Forcing --floorp-chrome-surface-color
+ * with !important here would render the toolbar ~opaque (the LWT accent /
+ * toolbar color usually has very high alpha, e.g. 0.96 for Alpenglow) and hide
+ * the theme background, which is the bug we are fixing.
+ *
+ * We only expose --floorp-chrome-surface-color as a token for downstream
+ * consumers (e.g. tab color matching) without touching the toolbar's own
+ * background, preserving Firefox's native LWT transparency behavior. */
+:root[lwtheme] {
   --floorp-chrome-surface-color: var(
     --toolbar-bgcolor,
     var(--toolbar-background-color)
   );
-  background-color: var(--floorp-chrome-surface-color) !important;
-  color: var(--toolbar-text-color);
 }
 
-/* Lepton paints PersonalToolbar via background-image; override the image to
- * follow the same surface color in both cases. */
-#PersonalToolbar {
+/* Lepton paints PersonalToolbar via background-image. Only override it for the
+ * no-theme case (where the body has no artwork anyway). Under LWT the
+ * PersonalToolbar must keep its native translucent fill so the body artwork
+ * shows through; any forced background-image here would clobber that. */
+:root:not([lwtheme]) #PersonalToolbar {
   background-image: linear-gradient(
       var(--floorp-chrome-surface-color),
       var(--floorp-chrome-surface-color)
-    ),
-    var(--lwt-additional-images) !important;
-  background-repeat: repeat-x, var(--lwt-background-tiling);
-  background-position: 0 0, var(--lwt-background-alignment);
+    ) !important;
+  background-repeat: repeat-x;
+  background-position: 0 0;
 }
 `;
 

@@ -178,10 +178,16 @@ export const LEPTON_COMPAT_152_CSS = `
   --toolbar-bgcolor: var(--toolbar-background-color);
 }
 /* The navigator toolbox background follows --lwt-accent-color in Lepton; make
- * sure it reads the live (possibly LWT-provided) value. */
-:root:is(:-moz-lwtheme, [lwtheme]) #navigator-toolbox {
-  background-color: var(--lwt-accent-color);
-}
+ * sure it reads the live (possibly LWT-provided) value.
+ *
+ * IMPORTANT: only pin --lwt-accent-color as a TOKEN here. Do NOT set
+ * background-color on #navigator-toolbox under LWT. Firefox draws a
+ * Lightweight Theme's additional_backgrounds on <body> and relies on
+ * #navigator-toolbox (and its translucent .browser-toolbar children) being
+ * transparent so that artwork shows through (see browser-shared.css). Giving
+ * #navigator-toolbox an opaque accent fill hides the entire theme background,
+ * which is the bug we are fixing. The toolbox itself stays transparent; the
+ * token alias above is enough for any Lepton rule that reads the accent. */
 
 /*= Primary button accent (Lepton blue) =====================================
  * Lepton declares these inside the built-in-theme block that no longer
