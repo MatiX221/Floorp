@@ -273,6 +273,9 @@ function generationMessages(
         "For CI, list representative raw runCommands from the inventory; never write None for a workflow that has runCommands.",
         "For CI/test docs, focus on .github/workflows/colocated_runner_test.yml and .github/workflows/docs_pipeline.yml; avoid release, publish, signing, and deployment commands.",
         "For authored architecture and directory pages, prefer comprehensive nested explanations over shallow summaries when the inventory provides enough source evidence.",
+        "Never describe the OS server or router as Hono, Express, Fastify, or another web framework unless that framework appears in an allowed source path or inventory summary.",
+        "Never describe Window Actor option fields such as parent, child, matches, includeChrome, or allFrames unless those exact fields appear in the inventory.",
+        "For Floorp OS API details, distinguish route inventory from operational security behavior; do not invent MCP setup steps, token locations, body limits, timeouts, auth flows, or error mappings unless the inventory explicitly includes those facts.",
         "Use real Markdown newlines. Do not include literal \\n or \\t escape sequences in MDX body text.",
         "Write English Docusaurus-compatible MDX body content.",
       ].join("\n"),
@@ -315,6 +318,9 @@ function singlePageMessages(
         "Do not cite directories, generated output paths, wildcard paths, command-only paths, or paths that are only mentioned inside workflow shell commands.",
         "Never include secrets, environment values, endpoint URLs, or raw prompts.",
         "Do not present known drift strings as current commands or APIs.",
+        "Never describe the OS server or router as Hono, Express, Fastify, or another web framework unless that framework appears in the allowed citation list.",
+        "Never describe Window Actor option fields such as parent, child, matches, includeChrome, or allFrames unless the inventory explicitly includes those fields.",
+        "For Floorp OS API details, distinguish route inventory from operational security behavior; do not invent MCP setup steps, token locations, body limits, timeouts, auth flows, or error mappings unless the inventory explicitly includes those facts.",
         "Write English Docusaurus-compatible MDX body content.",
         "Prefer comprehensive nested explanations over shallow summaries when the inventory provides enough source evidence.",
       ].join("\n"),
@@ -1337,19 +1343,44 @@ function buildFloorpOsApiPage(inventory: DocsInventory): string {
       )
     }\``,
     "",
-    "The server is implemented as a privileged Firefox module. It listens on loopback, observes Floorp OS and MCP preference state, writes a local token file, and registers route modules when enabled. The router keeps the HTTP surface small and explicit by registering typed `GET`, `POST`, and `DELETE` handlers. Shared automation routes are reused by both visible tab automation and scraper automation so MCP-facing behavior stays consistent between those two clients.",
+    "The server, router, shared automation route registry, OS Automotor manager, and settings page are separate source boundaries. The inventory uses these boundaries to describe where local HTTP handling, route matching, browser automation, process management, and settings UI integration live.",
     "",
-    "## Enablement And Security Model",
+    "## Integration Boundary",
     "",
-    "The server is controlled by Floorp preferences in the local browser profile. It starts when either Floorp OS or MCP integration is enabled, uses the configured port, and generates or reuses a bearer token. The token is written under the user's home directory so local clients can authenticate without embedding credentials in source. The server code keeps the socket loopback-only and treats token auth as optional only when no token is configured.",
+    "From the inventory, Floorp OS API should be treated as a privileged local integration boundary rather than a web page feature. Local applications and MCP servers interact with this boundary through the route namespaces listed below. Browser state and active automation are exposed through route modules, while the settings page and OS Automotor manager are separate integration points for user-facing enablement and process management.",
     "",
-    "Important operational constraints:",
+    "Source-backed implementation boundaries:",
     "",
-    "- The boundary is local HTTP/JSON, not a public network API.",
-    "- MCP servers and desktop tools should authenticate with the bearer token rather than relying on process locality alone.",
-    "- Request bodies are size-limited and socket reads have explicit header/body timeouts.",
-    "- Automation routes validate URL schemes and prefer element fingerprints when available.",
-    "- Browser-facing errors are mapped to JSON responses so tool callers can distinguish missing instances from internal failures.",
+    `- HTTP server behavior is owned by \`${
+      formatSource(
+        inventory.floorpOsApi.server.path,
+        inventory.floorpOsApi.server.line,
+      )
+    }\`.`,
+    `- Route registration and path matching are owned by \`${
+      formatSource(
+        inventory.floorpOsApi.router.path,
+        inventory.floorpOsApi.router.line,
+      )
+    }\`.`,
+    `- Shared tab and scraper automation routes are owned by \`${
+      formatSource(
+        inventory.floorpOsApi.sharedAutomationRoutes.path,
+        inventory.floorpOsApi.sharedAutomationRoutes.line,
+      )
+    }\`.`,
+    `- Floorp OS process management is owned by \`${
+      formatSource(
+        inventory.floorpOsApi.automotorManager.path,
+        inventory.floorpOsApi.automotorManager.line,
+      )
+    }\`.`,
+    `- The settings surface is owned by \`${
+      formatSource(
+        inventory.floorpOsApi.settingsPage.path,
+        inventory.floorpOsApi.settingsPage.line,
+      )
+    }\`.`,
     "",
     "## Route Namespaces",
     "",
@@ -1371,12 +1402,12 @@ function buildFloorpOsApiPage(inventory: DocsInventory): string {
     ]),
     "## Client And MCP Integration Shape",
     "",
-    "A typical MCP server or local application uses this layer in four steps:",
+    "The generated inventory supports the following high-level client shape without prescribing authentication storage, startup policy, or MCP server packaging details:",
     "",
-    "1. Read the local Floorp OS server token from the user profile token file created by the server.",
-    "2. Call `GET /health` on the configured loopback port to confirm reachability.",
-    "3. Use browser context routes such as `/browser/context`, `/browser/tabs`, `/browser/history`, or `/browser/downloads` when the client needs passive context.",
-    "4. Use `/tabs/instances` or `/scraper/instances` plus the shared automation routes when the client needs active browser interaction.",
+    "1. Use `GET /health` to check the local server namespace.",
+    "2. Use browser context routes such as `/browser/context`, `/browser/tabs`, `/browser/history`, or `/browser/downloads` when the client needs passive browser context.",
+    "3. Use `/tabs/instances` plus shared `/tabs/instances/:id/*` routes when the client needs user-visible tab automation.",
+    "4. Use `/scraper/instances` plus shared `/scraper/instances/:id/*` routes when the client needs scraper-style automation.",
     "",
     "Visible tab automation and scraper automation intentionally share many route names. Tool authors should choose `/tabs` when user-visible browser state matters and `/scraper` when an isolated automation instance is more appropriate.",
     "",
@@ -1386,7 +1417,7 @@ function buildFloorpOsApiPage(inventory: DocsInventory): string {
       `- \`${formatSource(entry.path, entry.line)}\``
     ),
     "",
-    "The full OS API verifier exercises real local HTTP calls against a running Floorp OS server. Use those verification sources when changing route behavior, token handling, browser automation semantics, or MCP integration assumptions.",
+    "The full OS API verifier exercises real local HTTP calls against a running Floorp OS server. Use those verification sources when changing route behavior, browser automation semantics, or MCP integration assumptions.",
   ].join("\n");
 }
 
@@ -1543,7 +1574,7 @@ function buildCiTestReference(inventory: DocsInventory): string {
     "",
     `Triggers: ${formatList(docsWorkflow?.triggers ?? [])}`,
     "",
-    "Pull requests collect and verify the deterministic inventory without calling an LLM. Manual dispatch and the weekly schedule generate MDX under the docs/development directory with an OpenAI-compatible LLM, verify it, run an LLM audit, and upload the generated docs artifact for review.",
+    "The docs workflow run commands include inventory collection, generated MDX verification, docs pipeline unit tests, generation, and audit. Event and job-level conditions are defined in the workflow file itself.",
     "",
     "```bash",
     ...docsCommands,

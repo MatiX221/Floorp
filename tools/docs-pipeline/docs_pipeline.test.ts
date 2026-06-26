@@ -1271,6 +1271,9 @@ Deno.test("writeGeneratedDocs generates Floorp OS API layer docs from inventory"
     assert(text.includes("/tabs/instances/:id/element"));
     assert(text.includes("/scraper/instances/:id/text"));
     assert(!text.includes("/scraper/instances/:id/element"));
+    assert(!text.includes("token file"));
+    assert(!text.includes("Request bodies are size-limited"));
+    assert(!text.includes("body limits"));
     assert(
       text.includes(
         "browser-features/modules/modules/os-server/server.sys.mts",

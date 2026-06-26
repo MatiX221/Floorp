@@ -1,7 +1,7 @@
 ---
 title: "CI & Test Reference"
 sidebar_label: "CI & Tests"
-floorp_commit: "9ae6415c6e0d491b6e5c7b7197981c12ecbb67e8"
+floorp_commit: "95da078c4c4d02537997f873cf0726cb14405551"
 generated: true
 ---
 # CI & Test Reference
@@ -29,7 +29,7 @@ Source: `.github/workflows/docs_pipeline.yml`
 
 Triggers: `pull_request`, `push`, `schedule`, `workflow_dispatch`
 
-Pull requests collect and verify the deterministic inventory without calling an LLM. Manual dispatch and the weekly schedule generate MDX under the docs/development directory with an OpenAI-compatible LLM, verify it, run an LLM audit, and upload the generated docs artifact for review.
+The docs workflow run commands include inventory collection, generated MDX verification, docs pipeline unit tests, generation, and audit. Event and job-level conditions are defined in the workflow file itself.
 
 ```bash
 deno task docs-pipeline:collect --out _dist/docs-pipeline/inventory.json
