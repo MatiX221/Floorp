@@ -385,7 +385,10 @@ async function verifyDeterministicPagesAreFresh(
       const actualPath = path.join(docsDir, ...pagePath.split("/"));
       const expected = await Deno.readTextFile(expectedPath);
       const actual = await Deno.readTextFile(actualPath);
-      if (actual !== expected) {
+      if (
+        normalizeVolatileGeneratedText(actual) !==
+          normalizeVolatileGeneratedText(expected)
+      ) {
         issues.push({
           path: pagePath,
           message:
@@ -398,6 +401,18 @@ async function verifyDeterministicPagesAreFresh(
   }
 
   return issues;
+}
+
+function normalizeVolatileGeneratedText(text: string): string {
+  return text
+    .replace(
+      /^floorp_commit: .+$/m,
+      'floorp_commit: "__FLOORP_COMMIT__"',
+    )
+    .replace(
+      /^Inventory generated from Floorp commit `[^`]+`\.$/m,
+      "Inventory generated from Floorp commit `__FLOORP_COMMIT__`.",
+    );
 }
 
 async function collectMdxFiles(docsDir: string): Promise<string[]> {

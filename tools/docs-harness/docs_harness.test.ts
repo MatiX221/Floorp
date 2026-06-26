@@ -927,6 +927,24 @@ Deno.test("verifyDocsHarness rejects stale deterministic catalog pages", async (
   }
 });
 
+Deno.test("verifyDocsHarness ignores volatile commit changes in deterministic pages", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const generatedInventory = sampleInventory();
+    await writeSampleGeneratedPages(dir, generatedInventory);
+
+    const pullRequestInventory = {
+      ...generatedInventory,
+      floorpCommit: "synthetic-pr-merge-commit",
+    };
+    const issues = await verifyDocsHarness(pullRequestInventory, dir);
+
+    assertEquals(issues, []);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
 Deno.test("seedCodexDocs writes required docs and prompt", async () => {
   const dir = await Deno.makeTempDir();
   try {
