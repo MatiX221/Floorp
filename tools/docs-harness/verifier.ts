@@ -291,6 +291,16 @@ function verifyInventory(inventory: DocsInventory): VerificationIssue[] {
       ...inventory.features.chromeStatic.map((feature) => feature.source.path),
       ...inventory.features.settingsRoutes.map((route) => route.source.path),
       ...inventory.features.windowActors.map((actor) => actor.source.path),
+      inventory.floorpOsApi.server.path,
+      inventory.floorpOsApi.router.path,
+      inventory.floorpOsApi.sharedAutomationRoutes.path,
+      inventory.floorpOsApi.automotorManager.path,
+      inventory.floorpOsApi.settingsPage.path,
+      ...inventory.floorpOsApi.verification.map((entry) => entry.path),
+      ...inventory.floorpOsApi.routeModules.map((module) => module.source.path),
+      ...inventory.floorpOsApi.routeModules.flatMap((module) =>
+        module.routes.map((route) => route.source.path)
+      ),
     ]
   ) {
     if (!repoPathExists(source)) {

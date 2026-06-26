@@ -331,6 +331,13 @@ function allowedCitationPaths(inventory: DocsInventory): string[] {
       ...inventory.features.chromeStatic.map((feature) => feature.source.path),
       ...inventory.features.settingsRoutes.map((route) => route.source.path),
       ...inventory.features.windowActors.map((actor) => actor.source.path),
+      inventory.floorpOsApi.server.path,
+      inventory.floorpOsApi.router.path,
+      inventory.floorpOsApi.sharedAutomationRoutes.path,
+      inventory.floorpOsApi.automotorManager.path,
+      inventory.floorpOsApi.settingsPage.path,
+      ...inventory.floorpOsApi.verification.map((entry) => entry.path),
+      ...inventory.floorpOsApi.routeModules.map((module) => module.source.path),
       ...inventory.ci.workflows.map((workflow) => workflow.path),
     ]),
   ].sort();
@@ -703,6 +710,8 @@ function titleForPage(pagePath: string): string {
       return "Settings Pages Routing";
     case "development/directories/tools-and-ci.mdx":
       return "Tools & CI Directories";
+    case "development/directories/floorp-os-api.mdx":
+      return "Floorp OS API Layer";
     case "development/directories/static-gecko.mdx":
       return "Static Gecko Directory";
     case "development/features/browser-features/overview.mdx":
@@ -771,6 +780,8 @@ function sidebarLabelForPage(pagePath: string): string {
       return "Routing";
     case "development/directories/tools-and-ci.mdx":
       return "Tools & CI";
+    case "development/directories/floorp-os-api.mdx":
+      return "Floorp OS API";
     case "development/directories/static-gecko.mdx":
       return "Static Gecko";
     case "development/features/browser-features/overview.mdx":
@@ -896,6 +907,9 @@ function finalizePageBody(
   );
   if (actorCategory) {
     return buildActorCategoryPage(actorCategory, inventory);
+  }
+  if (page.path === "development/directories/floorp-os-api.mdx") {
+    return buildFloorpOsApiPage(inventory);
   }
   if (page.path === "development/reference/source-inventory.mdx") {
     return buildSourceInventory(inventory);
@@ -1172,6 +1186,106 @@ function uncategorizedActors(
   );
 }
 
+function buildFloorpOsApiPage(inventory: DocsInventory): string {
+  const routeModules = inventory.floorpOsApi.routeModules.filter((module) =>
+    module.routes.length > 0
+  );
+  const routeCount = routeModules.reduce(
+    (sum, module) => sum + module.routes.length,
+    0,
+  );
+
+  return [
+    "# Floorp OS API Layer",
+    "",
+    "Floorp OS API is a special integration layer for local applications, MCP servers, and other automation clients that need controlled access to Floorp browser state. It is not a normal settings page or chrome UI feature. It exposes a loopback-only HTTP/JSON boundary from privileged Firefox modules and then routes requests into browser, tab, scraper, workspace, and automation services.",
+    "",
+    "## Ownership And Source Boundaries",
+    "",
+    `- Local HTTP server: \`${
+      formatSource(
+        inventory.floorpOsApi.server.path,
+        inventory.floorpOsApi.server.line,
+      )
+    }\``,
+    `- Router abstraction: \`${
+      formatSource(
+        inventory.floorpOsApi.router.path,
+        inventory.floorpOsApi.router.line,
+      )
+    }\``,
+    `- Shared browser automation routes: \`${
+      formatSource(
+        inventory.floorpOsApi.sharedAutomationRoutes.path,
+        inventory.floorpOsApi.sharedAutomationRoutes.line,
+      )
+    }\``,
+    `- OS Automotor process manager: \`${
+      formatSource(
+        inventory.floorpOsApi.automotorManager.path,
+        inventory.floorpOsApi.automotorManager.line,
+      )
+    }\``,
+    `- Settings page entry: \`${
+      formatSource(
+        inventory.floorpOsApi.settingsPage.path,
+        inventory.floorpOsApi.settingsPage.line,
+      )
+    }\``,
+    "",
+    "The server is implemented as a privileged Firefox module. It listens on loopback, observes Floorp OS and MCP preference state, writes a local token file, and registers route modules when enabled. The router keeps the HTTP surface small and explicit by registering typed `GET`, `POST`, and `DELETE` handlers. Shared automation routes are reused by both visible tab automation and scraper automation so MCP-facing behavior stays consistent between those two clients.",
+    "",
+    "## Enablement And Security Model",
+    "",
+    "The server is controlled by Floorp preferences in the local browser profile. It starts when either Floorp OS or MCP integration is enabled, uses the configured port, and generates or reuses a bearer token. The token is written under the user's home directory so local clients can authenticate without embedding credentials in source. The server code keeps the socket loopback-only and treats token auth as optional only when no token is configured.",
+    "",
+    "Important operational constraints:",
+    "",
+    "- The boundary is local HTTP/JSON, not a public network API.",
+    "- MCP servers and desktop tools should authenticate with the bearer token rather than relying on process locality alone.",
+    "- Request bodies are size-limited and socket reads have explicit header/body timeouts.",
+    "- Automation routes validate URL schemes and prefer element fingerprints when available.",
+    "- Browser-facing errors are mapped to JSON responses so tool callers can distinguish missing instances from internal failures.",
+    "",
+    "## Route Namespaces",
+    "",
+    `The generated inventory currently finds ${routeCount} route registrations across ${routeModules.length} route namespaces.`,
+    "",
+    ...routeModules.flatMap((module) => [
+      `### ${module.namespace}`,
+      "",
+      `Source: \`${formatSource(module.source.path, module.source.line)}\``,
+      "",
+      "| Method | Route | Purpose |",
+      "|---|---|---|",
+      ...module.routes.map((route) =>
+        `| ${route.method} | \`${
+          escapeTableCell(formatOsApiRoutePath(route.path))
+        }\` | ${escapeTableCell(route.summary)} |`
+      ),
+      "",
+    ]),
+    "## Client And MCP Integration Shape",
+    "",
+    "A typical MCP server or local application uses this layer in four steps:",
+    "",
+    "1. Read the local Floorp OS server token from the user profile token file created by the server.",
+    "2. Call `GET /health` on the configured loopback port to confirm reachability.",
+    "3. Use browser context routes such as `/browser/context`, `/browser/tabs`, `/browser/history`, or `/browser/downloads` when the client needs passive context.",
+    "4. Use `/tabs/instances` or `/scraper/instances` plus the shared automation routes when the client needs active browser interaction.",
+    "",
+    "Visible tab automation and scraper automation intentionally share many route names. Tool authors should choose `/tabs` when user-visible browser state matters and `/scraper` when an isolated automation instance is more appropriate.",
+    "",
+    "## Verification Sources",
+    "",
+    ...inventory.floorpOsApi.verification.map((entry) =>
+      `- \`${formatSource(entry.path, entry.line)}\``
+    ),
+    "",
+    "The full OS API verifier exercises real local HTTP calls against a running Floorp OS server. Use those verification sources when changing route behavior, token handling, browser automation semantics, or MCP integration assumptions.",
+  ].join("\n");
+}
+
 function categorySlug(pagePath: string): string {
   return pagePath.split("/").at(-1)!.replace(/\.mdx$/, "");
 }
@@ -1202,6 +1316,10 @@ function buildSourceInventory(inventory: DocsInventory): string {
     `| Window Actor registration | \`${inventory.architecture.windowActors.source.path}\` |`,
     `| Startup bridge loader | \`${inventory.architecture.bridgeLoader.source.path}\` |`,
     `| Loader dev server | \`${inventory.architecture.loaderDevServer.source.path}\` |`,
+    `| Floorp OS local server | \`${inventory.floorpOsApi.server.path}\` |`,
+    `| Floorp OS router | \`${inventory.floorpOsApi.router.path}\` |`,
+    `| Floorp OS shared automation routes | \`${inventory.floorpOsApi.sharedAutomationRoutes.path}\` |`,
+    `| Floorp OS Automotor manager | \`${inventory.floorpOsApi.automotorManager.path}\` |`,
     "",
     "## Command Sources",
     "",
@@ -1214,6 +1332,12 @@ function buildSourceInventory(inventory: DocsInventory): string {
     `- Static chrome features: \`browser-features/chrome/static\` (${inventory.features.chromeStatic.length} entries)`,
     `- Settings routes: \`browser-features/pages-settings/src/App.tsx\` (${inventory.features.settingsRoutes.length} routes)`,
     `- Window Actors: \`browser-features/modules/modules/BrowserGlue.sys.mts\` (${inventory.features.windowActors.length} actors)`,
+    `- Floorp OS API routes: \`browser-features/modules/modules/os-server\` (${
+      inventory.floorpOsApi.routeModules.reduce(
+        (sum, module) => sum + module.routes.length,
+        0,
+      )
+    } routes)`,
     "",
     "## CI Sources",
     "",
@@ -1345,6 +1469,10 @@ function selectCommands(commands: string[], prefixes: string[]): string[] {
 
 function escapeTableCell(value: string): string {
   return value.replaceAll("|", "\\|");
+}
+
+function formatOsApiRoutePath(path: string): string {
+  return path.replaceAll("{tabs|scraper}", "(tabs or scraper)");
 }
 
 function formatSource(path: string, line?: number): string {

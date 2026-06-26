@@ -3,6 +3,8 @@
 import { assert, assertEquals } from "@std/assert";
 import {
   extractChromeFeatureDiscovery,
+  extractOsApiRouteEntries,
+  extractSharedOsApiRouteEntries,
   extractWindowActors,
   parseDenoTasksFromText,
   parseFelesCommandsFromText,
@@ -92,6 +94,83 @@ Deno.test("extractWindowActors reads addJSWindowActors and actor count", () => {
 
   assertEquals(actors.registrationApi, "ActorManagerParent.addJSWindowActors");
   assertEquals(actors.actorCount, 2);
+});
+
+Deno.test("extractOsApiRouteEntries reads namespaced local HTTP routes", () => {
+  const routes = extractOsApiRouteEntries(
+    `
+    export function registerTabRoutes(api: NamespaceBuilder): void {
+      api.namespace("/tabs", (t: NamespaceBuilder) => {
+        t.get("/list", async () => ({ status: 200, body: [] }));
+        t.post<{ url: string }, { instanceId: string }>(
+          "/instances",
+          async () => ({ status: 200, body: { instanceId: "id" } }),
+        );
+        t.delete("/instances/:id", async () => ({
+          status: 200,
+          body: { ok: true },
+        }));
+      });
+    }
+  `,
+    "browser-features/modules/modules/os-server/tabs/routes.sys.mts",
+    "/tabs",
+  );
+
+  assertEquals(
+    routes.map((route) => `${route.method} ${route.path}`),
+    [
+      "POST /tabs/instances",
+      "DELETE /tabs/instances/:id",
+      "GET /tabs/list",
+    ],
+  );
+  assertEquals(
+    routes[0].source.path,
+    "browser-features/modules/modules/os-server/tabs/routes.sys.mts",
+  );
+});
+
+Deno.test("extractSharedOsApiRouteEntries expands conditional shared routes", () => {
+  const text = `
+    export function registerCommonAutomationRoutes(
+      ns: NamespaceBuilder,
+      options: { includeGetElement?: boolean } = {},
+    ): void {
+      ns.get("/instances/:id/text", async () => ({ status: 200, body: {} }));
+      if (options.includeGetElement) {
+        ns.get<unknown, ElementResponse>(
+          "/instances/:id/element",
+          async () => ({ status: 200, body: {} }),
+        );
+      }
+    }
+  `;
+
+  const tabsRoutes = extractSharedOsApiRouteEntries(
+    text,
+    "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+    "/tabs",
+    { includeGetElement: true },
+  );
+  const scraperRoutes = extractSharedOsApiRouteEntries(
+    text,
+    "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+    "/scraper",
+    { includeGetElement: false },
+  );
+
+  assert(
+    tabsRoutes.some((route) => route.path === "/tabs/instances/:id/element"),
+  );
+  assert(
+    !scraperRoutes.some((route) =>
+      route.path === "/scraper/instances/:id/element"
+    ),
+  );
+  assert(
+    scraperRoutes.some((route) => route.path === "/scraper/instances/:id/text"),
+  );
 });
 
 Deno.test("parseWorkflowRunCommands reads inline and block run commands", () => {
@@ -514,6 +593,112 @@ function sampleInventory(): DocsInventory {
         },
       ],
     },
+    floorpOsApi: {
+      server: {
+        path: "browser-features/modules/modules/os-server/server.sys.mts",
+      },
+      router: {
+        path: "browser-features/modules/modules/os-server/router.sys.mts",
+      },
+      sharedAutomationRoutes: {
+        path:
+          "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+      },
+      automotorManager: {
+        path:
+          "browser-features/modules/modules/os-automotor/OSAutomotor-manager.sys.mts",
+      },
+      settingsPage: {
+        path: "browser-features/pages-settings/src/app/floorp-os/page.tsx",
+      },
+      verification: [
+        { path: "tools/os-test/verify_os_server_full.ts" },
+        { path: "tools/os-test/run_verify_os_server_full_wrapper.ts" },
+        { path: "tools/dev-tool.ts" },
+      ],
+      routeModules: [
+        {
+          namespace: "server",
+          source: {
+            path: "browser-features/modules/modules/os-server/server.sys.mts",
+          },
+          routes: [
+            {
+              method: "GET",
+              path: "/health",
+              source: {
+                path:
+                  "browser-features/modules/modules/os-server/server.sys.mts",
+              },
+              summary: "Reports local OS server health.",
+            },
+          ],
+        },
+        {
+          namespace: "tabs",
+          source: {
+            path:
+              "browser-features/modules/modules/os-server/tabs/routes.sys.mts",
+          },
+          routes: [
+            {
+              method: "POST",
+              path: "/tabs/instances",
+              source: {
+                path:
+                  "browser-features/modules/modules/os-server/tabs/routes.sys.mts",
+              },
+              summary: "Controls visible tab automation instances.",
+            },
+          ],
+        },
+        {
+          namespace: "tabs shared automation",
+          source: {
+            path:
+              "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+          },
+          routes: [
+            {
+              method: "GET",
+              path: "/tabs/instances/:id/element",
+              source: {
+                path:
+                  "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+              },
+              summary: "Floorp OS local HTTP API route.",
+            },
+            {
+              method: "GET",
+              path: "/tabs/instances/:id/text",
+              source: {
+                path:
+                  "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+              },
+              summary: "Extracts page or element text for automation clients.",
+            },
+          ],
+        },
+        {
+          namespace: "scraper shared automation",
+          source: {
+            path:
+              "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+          },
+          routes: [
+            {
+              method: "GET",
+              path: "/scraper/instances/:id/text",
+              source: {
+                path:
+                  "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+              },
+              summary: "Extracts page or element text for automation clients.",
+            },
+          ],
+        },
+      ],
+    },
     knownDriftChecks: ["deno task dev", "ActorManagerParent.addActors"],
   };
 }
@@ -898,6 +1083,34 @@ Deno.test("writeGeneratedDocs generates nested feature and actor catalogs from i
         "browser-features/modules/modules/BrowserGlue.sys.mts",
       ),
     );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("writeGeneratedDocs generates Floorp OS API layer docs from inventory", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await writeGeneratedDocs(
+      dir,
+      { pages: sampleGeneratedPages() },
+      sampleInventory(),
+    );
+
+    const text = await Deno.readTextFile(
+      `${dir}/development/directories/floorp-os-api.mdx`,
+    );
+    assert(text.includes("MCP servers"));
+    assert(text.includes("/tabs/instances"));
+    assert(text.includes("/tabs/instances/:id/element"));
+    assert(text.includes("/scraper/instances/:id/text"));
+    assert(!text.includes("/scraper/instances/:id/element"));
+    assert(
+      text.includes(
+        "browser-features/modules/modules/os-server/server.sys.mts",
+      ),
+    );
+    assert(text.includes("tools/os-test/verify_os_server_full.ts"));
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

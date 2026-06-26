@@ -75,6 +75,27 @@ export type WindowActorEntry = {
   source: SourceRef;
 };
 
+export type OsApiRouteEntry = {
+  method: "GET" | "POST" | "DELETE";
+  path: string;
+  source: SourceRef;
+  summary: string;
+};
+
+export type FloorpOsApiInventory = {
+  server: SourceRef;
+  router: SourceRef;
+  sharedAutomationRoutes: SourceRef;
+  automotorManager: SourceRef;
+  settingsPage: SourceRef;
+  verification: SourceRef[];
+  routeModules: Array<{
+    namespace: string;
+    source: SourceRef;
+    routes: OsApiRouteEntry[];
+  }>;
+};
+
 export type DocsInventory = {
   schemaVersion: 1;
   generatedAt: string;
@@ -94,6 +115,7 @@ export type DocsInventory = {
     settingsRoutes: SettingsRouteEntry[];
     windowActors: WindowActorEntry[];
   };
+  floorpOsApi: FloorpOsApiInventory;
   knownDriftChecks: string[];
 };
 
@@ -109,6 +131,7 @@ export type GeneratedDocsPayload = {
 };
 
 export const DETERMINISTIC_GENERATED_PAGE_PATHS = [
+  "development/directories/floorp-os-api.mdx",
   "development/features/browser-features/overview.mdx",
   "development/features/browser-features/chrome-common.mdx",
   "development/features/browser-features/chrome-static.mdx",

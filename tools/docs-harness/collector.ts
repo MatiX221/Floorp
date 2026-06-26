@@ -9,6 +9,8 @@ import type {
   DocsInventory,
   FeatureCatalogEntry,
   FelesCommandEntry,
+  FloorpOsApiInventory,
+  OsApiRouteEntry,
   SettingsRouteEntry,
   SourceRef,
   WindowActorEntry,
@@ -199,6 +201,227 @@ export function extractLoaderDevServer(
   return {
     port: Number(match?.[1] ?? 0),
     source: source(pathFromRoot, viteConfigText, "port:"),
+  };
+}
+
+function joinApiPath(basePath: string, routePath: string): string {
+  if (routePath === "/") {
+    return basePath || "/";
+  }
+  const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
+  const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
+  return `${base}${route}` || "/";
+}
+
+function summarizeOsApiRoute(
+  method: OsApiRouteEntry["method"],
+  pathName: string,
+): string {
+  if (pathName === "/health") {
+    return "Reports local OS server health.";
+  }
+  if (pathName === "/browser/events") {
+    return "Streams browser-side events such as workspace changes.";
+  }
+  if (pathName.startsWith("/browser/context")) {
+    return "Returns recent browser context for local tools.";
+  }
+  if (pathName.startsWith("/browser/")) {
+    return "Reads browser tabs, history, downloads, or browser event state.";
+  }
+  if (pathName.includes("/instances") && pathName.includes("screenshot")) {
+    return "Captures browser content for automation clients.";
+  }
+  if (pathName.includes("/instances") && pathName.includes("text")) {
+    return "Extracts page or element text for automation clients.";
+  }
+  if (pathName.includes("/instances") && pathName.includes("click")) {
+    return "Performs browser interaction against a managed instance.";
+  }
+  if (pathName.includes("/instances") && method === "POST") {
+    return "Mutates or drives a managed browser automation instance.";
+  }
+  if (pathName.startsWith("/tabs/")) {
+    return "Controls visible tab automation instances.";
+  }
+  if (pathName.startsWith("/scraper/")) {
+    return "Controls headless scraper automation instances.";
+  }
+  if (pathName.startsWith("/workspaces")) {
+    return "Reads or switches Floorp workspace state.";
+  }
+  return "Floorp OS local HTTP API route.";
+}
+
+export function extractOsApiRouteEntries(
+  routeText: string,
+  pathFromRoot: string,
+  basePath: string,
+): OsApiRouteEntry[] {
+  const routes = new Map<string, OsApiRouteEntry>();
+  const routePattern =
+    /\b(?:api|b|t|s|w|ns)\.(get|post|delete)(?:<[\s\S]*?>)?\s*\(\s*["']([^"']+)["']/g;
+
+  for (const match of routeText.matchAll(routePattern)) {
+    const method = match[1].toUpperCase() as OsApiRouteEntry["method"];
+    const routePath = joinApiPath(basePath, match[2]);
+    const key = `${method} ${routePath}`;
+    routes.set(key, {
+      method,
+      path: routePath,
+      source: source(pathFromRoot, routeText, match[2]),
+      summary: summarizeOsApiRoute(method, routePath),
+    });
+  }
+
+  return [...routes.values()].sort((left, right) =>
+    `${left.path} ${left.method}`.localeCompare(`${right.path} ${right.method}`)
+  );
+}
+
+export function extractSharedOsApiRouteEntries(
+  routeText: string,
+  pathFromRoot: string,
+  basePath: string,
+  options: { includeGetElement: boolean },
+): OsApiRouteEntry[] {
+  const getElementPath = joinApiPath(basePath, "/instances/:id/element");
+  return extractOsApiRouteEntries(routeText, pathFromRoot, basePath).filter(
+    (route) => options.includeGetElement || route.path !== getElementPath,
+  );
+}
+
+function buildFloorpOsApiInventory(
+  texts: {
+    server: string;
+    router: string;
+    shared: string;
+    browser: string;
+    scraper: string;
+    tabs: string;
+    workspaces: string;
+    automotor: string;
+    settingsPage: string;
+  },
+): FloorpOsApiInventory {
+  return {
+    server: source(
+      "browser-features/modules/modules/os-server/server.sys.mts",
+      texts.server,
+      "Floorp OS Local HTTP Server",
+    ),
+    router: source(
+      "browser-features/modules/modules/os-server/router.sys.mts",
+      texts.router,
+      "export class Router",
+    ),
+    sharedAutomationRoutes: source(
+      "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+      texts.shared,
+      "registerCommonAutomationRoutes",
+    ),
+    automotorManager: source(
+      "browser-features/modules/modules/os-automotor/OSAutomotor-manager.sys.mts",
+      texts.automotor,
+      "OSAutomotor-manager",
+    ),
+    settingsPage: source(
+      "browser-features/pages-settings/src/app/floorp-os/page.tsx",
+      texts.settingsPage,
+      "Floorp",
+    ),
+    verification: [
+      { path: "tools/os-test/verify_os_server_full.ts" },
+      { path: "tools/os-test/run_verify_os_server_full_wrapper.ts" },
+      { path: "tools/dev-tool.ts" },
+    ],
+    routeModules: [
+      {
+        namespace: "server",
+        source: {
+          path: "browser-features/modules/modules/os-server/server.sys.mts",
+        },
+        routes: extractOsApiRouteEntries(
+          texts.server,
+          "browser-features/modules/modules/os-server/server.sys.mts",
+          "",
+        ),
+      },
+      {
+        namespace: "browser",
+        source: {
+          path:
+            "browser-features/modules/modules/os-server/browser/routes.sys.mts",
+        },
+        routes: extractOsApiRouteEntries(
+          texts.browser,
+          "browser-features/modules/modules/os-server/browser/routes.sys.mts",
+          "/browser",
+        ),
+      },
+      {
+        namespace: "tabs",
+        source: {
+          path:
+            "browser-features/modules/modules/os-server/tabs/routes.sys.mts",
+        },
+        routes: extractOsApiRouteEntries(
+          texts.tabs,
+          "browser-features/modules/modules/os-server/tabs/routes.sys.mts",
+          "/tabs",
+        ),
+      },
+      {
+        namespace: "scraper",
+        source: {
+          path:
+            "browser-features/modules/modules/os-server/scraper/routes.sys.mts",
+        },
+        routes: extractOsApiRouteEntries(
+          texts.scraper,
+          "browser-features/modules/modules/os-server/scraper/routes.sys.mts",
+          "/scraper",
+        ),
+      },
+      {
+        namespace: "workspaces",
+        source: {
+          path:
+            "browser-features/modules/modules/os-server/workspaces/routes.sys.mts",
+        },
+        routes: extractOsApiRouteEntries(
+          texts.workspaces,
+          "browser-features/modules/modules/os-server/workspaces/routes.sys.mts",
+          "/workspaces",
+        ),
+      },
+      {
+        namespace: "tabs shared automation",
+        source: {
+          path:
+            "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+        },
+        routes: extractSharedOsApiRouteEntries(
+          texts.shared,
+          "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+          "/tabs",
+          { includeGetElement: true },
+        ),
+      },
+      {
+        namespace: "scraper shared automation",
+        source: {
+          path:
+            "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+        },
+        routes: extractSharedOsApiRouteEntries(
+          texts.shared,
+          "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+          "/scraper",
+          { includeGetElement: false },
+        ),
+      },
+    ],
   };
 }
 
@@ -552,6 +775,15 @@ export async function collectDocsInventory(): Promise<DocsInventory> {
     chromeStaticFeatures,
     workflows,
     commit,
+    osServerText,
+    osRouterText,
+    osSharedRoutesText,
+    osBrowserRoutesText,
+    osScraperRoutesText,
+    osTabRoutesText,
+    osWorkspaceRoutesText,
+    osAutomotorText,
+    osSettingsPageText,
   ] = await Promise.all([
     readRepoText("deno.json"),
     readRepoText("tools/feles-build.ts"),
@@ -564,6 +796,27 @@ export async function collectDocsInventory(): Promise<DocsInventory> {
     collectChromeFeatureEntries("browser-features/chrome/static"),
     collectWorkflows(),
     gitSha(),
+    readRepoText("browser-features/modules/modules/os-server/server.sys.mts"),
+    readRepoText("browser-features/modules/modules/os-server/router.sys.mts"),
+    readRepoText(
+      "browser-features/modules/modules/os-server/shared/routes.sys.mts",
+    ),
+    readRepoText(
+      "browser-features/modules/modules/os-server/browser/routes.sys.mts",
+    ),
+    readRepoText(
+      "browser-features/modules/modules/os-server/scraper/routes.sys.mts",
+    ),
+    readRepoText(
+      "browser-features/modules/modules/os-server/tabs/routes.sys.mts",
+    ),
+    readRepoText(
+      "browser-features/modules/modules/os-server/workspaces/routes.sys.mts",
+    ),
+    readRepoText(
+      "browser-features/modules/modules/os-automotor/OSAutomotor-manager.sys.mts",
+    ),
+    readRepoText("browser-features/pages-settings/src/app/floorp-os/page.tsx"),
   ]);
 
   return {
@@ -625,6 +878,17 @@ export async function collectDocsInventory(): Promise<DocsInventory> {
       settingsRoutes: extractSettingsRoutes(settingsAppText),
       windowActors: extractWindowActorEntries(browserGlueText),
     },
+    floorpOsApi: buildFloorpOsApiInventory({
+      server: osServerText,
+      router: osRouterText,
+      shared: osSharedRoutesText,
+      browser: osBrowserRoutesText,
+      scraper: osScraperRoutesText,
+      tabs: osTabRoutesText,
+      workspaces: osWorkspaceRoutesText,
+      automotor: osAutomotorText,
+      settingsPage: osSettingsPageText,
+    }),
     knownDriftChecks: [
       "deno task dev",
       "deno task build",

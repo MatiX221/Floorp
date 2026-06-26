@@ -223,6 +223,8 @@ function titleForPage(pagePath: string): string {
       return "Settings Pages Routing";
     case "development/directories/tools-and-ci.mdx":
       return "Tools & CI Directories";
+    case "development/directories/floorp-os-api.mdx":
+      return "Floorp OS API Layer";
     case "development/directories/static-gecko.mdx":
       return "Static Gecko Directory";
     case "development/features/browser-features/overview.mdx":
@@ -294,6 +296,8 @@ function sidebarLabelForPage(pagePath: string): string {
       return "Routing";
     case "development/directories/tools-and-ci.mdx":
       return "Tools & CI";
+    case "development/directories/floorp-os-api.mdx":
+      return "Floorp OS API";
     case "development/directories/static-gecko.mdx":
       return "Static Gecko";
     case "development/features/browser-features/overview.mdx":
