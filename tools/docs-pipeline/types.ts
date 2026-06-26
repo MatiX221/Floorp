@@ -131,6 +131,7 @@ export type GeneratedDocsPayload = {
 };
 
 export const DETERMINISTIC_GENERATED_PAGE_PATHS = [
+  "development/directories/static-gecko.mdx",
   "development/directories/floorp-os-api.mdx",
   "development/features/browser-features/overview.mdx",
   "development/features/browser-features/chrome-common.mdx",
@@ -166,6 +167,5 @@ export const REQUIRED_GENERATED_PAGE_PATHS = [
   "development/directories/browser-features/pages-settings/build.mdx",
   "development/directories/browser-features/pages-settings/routing.mdx",
   "development/directories/tools-and-ci.mdx",
-  "development/directories/static-gecko.mdx",
   ...DETERMINISTIC_GENERATED_PAGE_PATHS,
 ] as const;

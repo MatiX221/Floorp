@@ -1285,6 +1285,29 @@ Deno.test("writeGeneratedDocs generates Floorp OS API layer docs from inventory"
   }
 });
 
+Deno.test("writeGeneratedDocs generates static Gecko docs from tracked sources", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await writeGeneratedDocs(
+      dir,
+      { pages: sampleGeneratedPages() },
+      sampleInventory(),
+    );
+
+    const text = await Deno.readTextFile(
+      `${dir}/development/directories/static-gecko.mdx`,
+    );
+    assert(text.includes("`static/gecko/pref/override.ini`"));
+    assert(text.includes("`static/gecko/config/README.md`"));
+    assert(text.includes("`.github/workflows/package.yml`"));
+    assert(!text.includes("static/gecko/config/version.txt"));
+    assert(!text.includes("from under `.github/workflows/package.yml`"));
+    assert(!text.includes("contains generated Gecko version files"));
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
 Deno.test("verifyDocsPipeline rejects stale deterministic catalog pages", async () => {
   const dir = await Deno.makeTempDir();
   try {

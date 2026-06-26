@@ -1018,6 +1018,9 @@ function finalizePageBody(
   if (page.path === "development/directories/floorp-os-api.mdx") {
     return buildFloorpOsApiPage(inventory);
   }
+  if (page.path === "development/directories/static-gecko.mdx") {
+    return buildStaticGeckoPage(inventory);
+  }
   if (page.path === "development/reference/source-inventory.mdx") {
     return buildSourceInventory(inventory);
   }
@@ -1418,6 +1421,63 @@ function buildFloorpOsApiPage(inventory: DocsInventory): string {
     ),
     "",
     "The full OS API verifier exercises real local HTTP calls against a running Floorp OS server. Use those verification sources when changing route behavior, browser automation semantics, or MCP integration assumptions.",
+  ].join("\n");
+}
+
+function sourceByPath(inventory: DocsInventory, sourcePath: string): string {
+  const entry: { path: string; line?: number } | undefined = [
+    ...inventory.architecture.layers.map((layer) => layer.source),
+    ...inventory.architecture.referenceSources.map((source) => source.source),
+    ...inventory.ci.workflows.map((workflow) => ({ path: workflow.path })),
+  ].find((source) => source.path === sourcePath);
+  return formatSource(sourcePath, entry?.line);
+}
+
+function buildStaticGeckoPage(inventory: DocsInventory): string {
+  const packageWorkflow = inventory.ci.workflows.find((workflow) =>
+    workflow.path === ".github/workflows/package.yml"
+  );
+  return [
+    "# Static Gecko Directory",
+    "",
+    "Floorp's static Gecko area contains tracked Gecko-facing configuration that belongs below the ESM, bridge, chrome UI, and pages layers. In the generated architecture inventory, the Firefox Base layer is represented by the preference override source.",
+    "",
+    "## Source Boundaries",
+    "",
+    `- Preference overrides: \`${
+      sourceByPath(inventory, "static/gecko/pref/override.ini")
+    }\``,
+    `- Tracked config directory marker: \`${
+      sourceByPath(inventory, "static/gecko/config/README.md")
+    }\``,
+    `- Packaging workflow: \`${
+      sourceByPath(
+        inventory,
+        packageWorkflow?.path ?? ".github/workflows/package.yml",
+      )
+    }\``,
+    "",
+    "`static/gecko/config/README.md` is the tracked file that keeps the config directory visible to repository inventory. It should not be described as generated output, as release-version storage, or as documentation for values that are only created during packaging.",
+    "",
+    "## Preference Overrides",
+    "",
+    "`static/gecko/pref/override.ini` is the source path used by the architecture inventory for Floorp's Firefox Base layer. Developer docs should cite this file when explaining Floorp defaults that are applied below browser chrome features.",
+    "",
+    "## Version And Packaging Relationship",
+    "",
+    "Version-file and branding behavior belongs to the packaging workflow source, not to a required tracked branding directory in the static Gecko tree. When documenting this area, cite `.github/workflows/package.yml` for packaging behavior and avoid treating the workflow file as a directory of assets.",
+    "",
+    "## Relationship To Upper Layers",
+    "",
+    "- ESM modules register browser services and Window Actors above the base layer.",
+    "- The bridge chooses development/test loaders or production chrome URLs above the base layer.",
+    "- Chrome features and pages run on top of the browser environment configured by the base layer.",
+    "",
+    "## Documentation Rules",
+    "",
+    "- Do not cite ignored generated files such as version output files as repository source paths.",
+    "- Do not describe optional branding paths as required tracked directories unless the inventory includes them.",
+    "- Use `static/gecko/pref/override.ini`, `static/gecko/config/README.md`, and `.github/workflows/package.yml` as the stable source-backed citations for this page.",
   ].join("\n");
 }
 
