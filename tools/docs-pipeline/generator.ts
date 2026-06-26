@@ -510,6 +510,31 @@ function sourceLinkReplacement(label: string, target: string): string {
   return `${normalizedLabel} (\`${normalizedTarget}\`)`;
 }
 
+function replacementForUnsupportedSourcePath(
+  sourcePath: string,
+  allowedSources: ReadonlySet<string>,
+): string | undefined {
+  if (
+    sourcePath.startsWith("static/gecko/config/") &&
+    allowedSources.has("static/gecko/config/README.md")
+  ) {
+    return "static/gecko/config/README.md";
+  }
+  if (
+    sourcePath.startsWith("static/gecko/branding") &&
+    allowedSources.has(".github/workflows/package.yml")
+  ) {
+    return ".github/workflows/package.yml";
+  }
+  if (
+    sourcePath.startsWith("static/gecko/") &&
+    allowedSources.has("static/gecko/pref/override.ini")
+  ) {
+    return "static/gecko/pref/override.ini";
+  }
+  return undefined;
+}
+
 export function normalizeSourceMarkdownLinks(
   text: string,
   inventory: DocsInventory,
@@ -528,10 +553,30 @@ export function normalizeSourceMarkdownLinks(
       /\[([^\]\n]+)\]\(([^)\s]+)\)/g,
       (fullMatch, label: string, target: string) => {
         const normalizedTarget = normalizeMarkdownLinkTarget(target);
+        const replacement = replacementForUnsupportedSourcePath(
+          normalizedTarget,
+          allowedSources,
+        );
+        if (replacement) {
+          return sourceLinkReplacement(label, replacement);
+        }
         if (!allowedSources.has(normalizedTarget)) {
           return fullMatch;
         }
         return sourceLinkReplacement(label, target);
+      },
+    ).replace(
+      /`((?:browser-features|bridge|tools|\.github\/workflows|static|docs\/|deno\.json|package\.json)[A-Za-z0-9_./-]*)`/g,
+      (fullMatch, sourcePath: string) => {
+        const normalizedSourcePath = normalizeMarkdownLinkTarget(sourcePath);
+        if (allowedSources.has(normalizedSourcePath)) {
+          return fullMatch;
+        }
+        const replacement = replacementForUnsupportedSourcePath(
+          normalizedSourcePath,
+          allowedSources,
+        );
+        return replacement ? `\`${replacement}\`` : fullMatch;
       },
     );
   }).join("\n");

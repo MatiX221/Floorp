@@ -735,6 +735,12 @@ const ARCHITECTURE_REFERENCE_SOURCES:
       summary: "Provides static chrome feature entry discovery.",
     },
     {
+      area: "Gecko version configuration",
+      source: { path: "static/gecko/config/README.md" },
+      summary:
+        "Documents generated Gecko version files that are intentionally ignored in local checkouts.",
+    },
+    {
       area: "Settings app entry",
       source: { path: "browser-features/pages-settings/src/main.tsx" },
       summary:
