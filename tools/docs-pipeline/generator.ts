@@ -550,6 +550,12 @@ function replacementForUnsupportedSourcePath(
   ) {
     return ".github/workflows/package.yml";
   }
+  if (!sourcePath.endsWith(".sys.mts") && sourcePath.endsWith(".mts")) {
+    const sysMtsPath = sourcePath.replace(/\.mts$/, ".sys.mts");
+    if (allowedSources.has(sysMtsPath)) {
+      return sysMtsPath;
+    }
+  }
   return undefined;
 }
 
