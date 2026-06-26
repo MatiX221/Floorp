@@ -191,7 +191,7 @@ Floorp's developer tooling is built on Deno and organized into several CLI tools
 
 #### Deno Task Entry Points
 
-`deno.json` defines the root task entrypoints, workspace packages, imports, and docs harness commands. Key tasks include:
+`deno.json` defines the root task entrypoints, workspace packages, imports, and docs pipeline commands. Key tasks include:
 
 - `deno task feles-build` — invokes the feles-build CLI
 - `deno task dev-tool` — invokes the dev-tool CLI
@@ -208,7 +208,7 @@ The CI pipeline is organized into reusable workflows and publishing workflows.
 
 - **Build Installers** (`.github/workflows/build_installers.yml`) — triggered by `workflow_call` and `workflow_dispatch`; builds platform-specific stub installers including a Tauri-based Windows stub installer.
 - **Browser Integration + Runner Tests** (`.github/workflows/colocated_runner_test.yml`) — triggered by `pull_request`, `push`, and `workflow_dispatch`; runs Xvfb-backed browser integration tests, smoke tests, and colocated runner tests. It autostarts `feles-build test` and waits for Marionette readiness.
-- **Docs LLM Harness** (`.github/workflows/docs_harness.yml`) — triggered by `pull_request`, `push`, `schedule`, and `workflow_dispatch`; collects source inventory, generates documentation, and verifies it against the inventory.
+- **Docs LLM Pipeline** (`.github/workflows/docs_pipeline.yml`) — triggered by `pull_request`, `push`, `schedule`, and `workflow_dispatch`; collects source inventory, generates documentation, and verifies it against the inventory.
 
 #### Packaging and Publishing Workflows
 

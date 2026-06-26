@@ -1,7 +1,7 @@
 ---
 title: "CI & Test Reference"
 sidebar_label: "CI & Tests"
-floorp_commit: "69f56f067cbdc722e290f2dfebb9c3e3f3ef60e9"
+floorp_commit: "91eb8a97e3386dc093f3b4e9ea80d4cb1d2e5df5"
 generated: true
 ---
 # CI & Test Reference
@@ -23,28 +23,28 @@ deno task test --no-autostart
 deno test -A tools/src/colocated_test_runner.test.ts
 ```
 
-## Docs Harness Workflow
+## Docs Pipeline Workflow
 
-Source: `.github/workflows/docs_harness.yml`
+Source: `.github/workflows/docs_pipeline.yml`
 
 Triggers: `pull_request`, `push`, `schedule`, `workflow_dispatch`
 
 Pull requests collect and verify the deterministic inventory without calling an LLM. Manual dispatch and the weekly schedule generate MDX under the docs/development directory with an OpenAI-compatible LLM, verify it, run an LLM audit, and upload the generated docs artifact for review.
 
 ```bash
-deno task docs-harness:collect --out _dist/docs-harness/inventory.json
-deno task docs-harness:verify --inventory _dist/docs-harness/inventory.json
-deno task test:docs-harness
-deno task docs-harness:audit --inventory _dist/docs-harness/inventory.json --docs-dir docs --out _dist/docs-harness/llm/audit.json
+deno task docs-pipeline:collect --out _dist/docs-pipeline/inventory.json
+deno task docs-pipeline:verify --inventory _dist/docs-pipeline/inventory.json
+deno task test:docs-pipeline
+deno task docs-pipeline:audit --inventory _dist/docs-pipeline/inventory.json --docs-dir docs --out _dist/docs-pipeline/llm/audit.json
 ```
 
 ## Local Verification Commands
 
-Use these source-backed commands when checking the docs harness locally:
+Use these source-backed commands when checking the docs pipeline locally:
 
 ```bash
-deno task docs-harness:collect --out _dist/docs-harness/inventory.json
-deno task docs-harness:verify --inventory _dist/docs-harness/inventory.json
-deno task docs-harness:audit --inventory _dist/docs-harness/inventory.json --docs-dir docs --out _dist/docs-harness/llm/audit.json
-deno task test:docs-harness
+deno task docs-pipeline:collect --out _dist/docs-pipeline/inventory.json
+deno task docs-pipeline:verify --inventory _dist/docs-pipeline/inventory.json
+deno task docs-pipeline:audit --inventory _dist/docs-pipeline/inventory.json --docs-dir docs --out _dist/docs-pipeline/llm/audit.json
+deno task test:docs-pipeline
 ```

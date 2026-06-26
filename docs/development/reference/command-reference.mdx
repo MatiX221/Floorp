@@ -1,7 +1,7 @@
 ---
 title: "Command Reference"
 sidebar_label: "Commands"
-floorp_commit: "69f56f067cbdc722e290f2dfebb9c3e3f3ef60e9"
+floorp_commit: "91eb8a97e3386dc093f3b4e9ea80d4cb1d2e5df5"
 generated: true
 ---
 # Command Reference
@@ -30,123 +30,123 @@ Implementation: `deno run -A tools/dev-tool.ts`
 
 Source: `deno.json:60`
 
-### `deno task docs-harness`
+### `deno task docs-pipeline`
 
 ```bash
-deno task docs-harness
+deno task docs-pipeline
 ```
 
-Implementation: `deno run --allow-read --allow-write --allow-env --allow-net --allow-run tools/docs-harness/mod.ts`
+Implementation: `deno run --allow-read --allow-write --allow-env --allow-net --allow-run tools/docs-pipeline/mod.ts`
 
 Source: `deno.json:61`
 
-### `deno task docs-harness:audit`
+### `deno task docs-pipeline:audit`
 
 ```bash
-deno task docs-harness:audit
+deno task docs-pipeline:audit
 ```
 
-Implementation: `deno run --allow-read --allow-write=_dist --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT,DOCS_AUDIT_LLM_BASE_URL,DOCS_AUDIT_LLM_MODEL,DOCS_AUDIT_LLM_API_KEY,DOCS_AUDIT_LLM_TEMPERATURE,DOCS_AUDIT_LLM_RESPONSE_FORMAT --allow-net tools/docs-harness/mod.ts audit`
+Implementation: `deno run --allow-read --allow-write=_dist --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT,DOCS_AUDIT_LLM_BASE_URL,DOCS_AUDIT_LLM_MODEL,DOCS_AUDIT_LLM_API_KEY,DOCS_AUDIT_LLM_TEMPERATURE,DOCS_AUDIT_LLM_RESPONSE_FORMAT --allow-net tools/docs-pipeline/mod.ts audit`
 
 Source: `deno.json:65`
 
-### `deno task docs-harness:audit-verify`
+### `deno task docs-pipeline:audit-verify`
 
 ```bash
-deno task docs-harness:audit-verify
+deno task docs-pipeline:audit-verify
 ```
 
-Implementation: `deno run --allow-read=_dist tools/docs-harness/mod.ts audit-verify`
+Implementation: `deno run --allow-read=_dist tools/docs-pipeline/mod.ts audit-verify`
 
 Source: `deno.json:66`
 
-### `deno task docs-harness:codex-audit-schema`
+### `deno task docs-pipeline:codex-audit-schema`
 
 ```bash
-deno task docs-harness:codex-audit-schema
+deno task docs-pipeline:codex-audit-schema
 ```
 
-Implementation: `deno run --allow-read tools/docs-harness/mod.ts codex-audit-schema`
+Implementation: `deno run --allow-read tools/docs-pipeline/mod.ts codex-audit-schema`
 
 Source: `deno.json:69`
 
-### `deno task docs-harness:codex-audit-verify`
+### `deno task docs-pipeline:codex-audit-verify`
 
 ```bash
-deno task docs-harness:codex-audit-verify
+deno task docs-pipeline:codex-audit-verify
 ```
 
-Implementation: `deno run --allow-read=_dist tools/docs-harness/mod.ts codex-audit-verify`
+Implementation: `deno run --allow-read=_dist tools/docs-pipeline/mod.ts codex-audit-verify`
 
 Source: `deno.json:70`
 
-### `deno task docs-harness:codex-seed`
+### `deno task docs-pipeline:codex-seed`
 
 ```bash
-deno task docs-harness:codex-seed
+deno task docs-pipeline:codex-seed
 ```
 
-Implementation: `deno run --allow-read --allow-write=_dist,docs tools/docs-harness/mod.ts codex-seed`
+Implementation: `deno run --allow-read --allow-write=_dist,docs tools/docs-pipeline/mod.ts codex-seed`
 
 Source: `deno.json:67`
 
-### `deno task docs-harness:codex-seed-docs`
+### `deno task docs-pipeline:codex-seed-docs`
 
 ```bash
-deno task docs-harness:codex-seed-docs
+deno task docs-pipeline:codex-seed-docs
 ```
 
-Implementation: `deno run --allow-read --allow-write=_dist,docs tools/docs-harness/mod.ts codex-seed --inventory _dist/docs-harness/inventory.json --out docs --prompt-out _dist/docs-harness/codex/generate.md`
+Implementation: `deno run --allow-read --allow-write=_dist,docs tools/docs-pipeline/mod.ts codex-seed --inventory _dist/docs-pipeline/inventory.json --out docs --prompt-out _dist/docs-pipeline/codex/generate.md`
 
 Source: `deno.json:68`
 
-### `deno task docs-harness:collect`
+### `deno task docs-pipeline:collect`
 
 ```bash
-deno task docs-harness:collect
+deno task docs-pipeline:collect
 ```
 
-Implementation: `deno run --allow-read --allow-write=_dist --allow-run=git tools/docs-harness/mod.ts collect`
+Implementation: `deno run --allow-read --allow-write=_dist --allow-run=git tools/docs-pipeline/mod.ts collect`
 
 Source: `deno.json:62`
 
-### `deno task docs-harness:generate`
+### `deno task docs-pipeline:generate`
 
 ```bash
-deno task docs-harness:generate
+deno task docs-pipeline:generate
 ```
 
-Implementation: `deno run --allow-read --allow-write=_dist,docs --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT --allow-net tools/docs-harness/mod.ts generate`
+Implementation: `deno run --allow-read --allow-write=_dist,docs --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT --allow-net tools/docs-pipeline/mod.ts generate`
 
 Source: `deno.json:63`
 
-### `deno task docs-harness:generate-docs`
+### `deno task docs-pipeline:generate-docs`
 
 ```bash
-deno task docs-harness:generate-docs
+deno task docs-pipeline:generate-docs
 ```
 
-Implementation: `deno run --allow-read --allow-write=_dist,docs --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT --allow-net tools/docs-harness/mod.ts generate --inventory _dist/docs-harness/inventory.json --out docs`
+Implementation: `deno run --allow-read --allow-write=_dist,docs --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT --allow-net tools/docs-pipeline/mod.ts generate --inventory _dist/docs-pipeline/inventory.json --out docs`
 
 Source: `deno.json:64`
 
-### `deno task docs-harness:verify`
+### `deno task docs-pipeline:verify`
 
 ```bash
-deno task docs-harness:verify
+deno task docs-pipeline:verify
 ```
 
-Implementation: `deno run --allow-read --allow-write=_dist tools/docs-harness/mod.ts verify`
+Implementation: `deno run --allow-read --allow-write=_dist tools/docs-pipeline/mod.ts verify`
 
 Source: `deno.json:71`
 
-### `deno task docs-harness:verify-docs`
+### `deno task docs-pipeline:verify-docs`
 
 ```bash
-deno task docs-harness:verify-docs
+deno task docs-pipeline:verify-docs
 ```
 
-Implementation: `deno run --allow-read --allow-write=_dist tools/docs-harness/mod.ts verify --inventory _dist/docs-harness/inventory.json --docs-dir docs`
+Implementation: `deno run --allow-read --allow-write=_dist tools/docs-pipeline/mod.ts verify --inventory _dist/docs-pipeline/inventory.json --docs-dir docs`
 
 Source: `deno.json:72`
 
@@ -170,13 +170,13 @@ Implementation: `deno run -A tools/src/colocated_test_runner.ts`
 
 Source: `deno.json:73`
 
-### `deno task test:docs-harness`
+### `deno task test:docs-pipeline`
 
 ```bash
-deno task test:docs-harness
+deno task test:docs-pipeline
 ```
 
-Implementation: `deno test --allow-read --allow-write --allow-net=127.0.0.1 tools/docs-harness/`
+Implementation: `deno test --allow-read --allow-write --allow-net=127.0.0.1 tools/docs-pipeline/`
 
 Source: `deno.json:75`
 

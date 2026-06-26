@@ -24,7 +24,7 @@ Floorp uses a colocated test runner located at `tools/src/colocated_test_runner.
 
 ## Deno Tasks
 
-The `deno.json` file serves as the central configuration for Deno tasks, imports, and workspace packages. It defines entrypoints for the tools and documentation harness.
+The `deno.json` file serves as the central configuration for Deno tasks, imports, and workspace packages. It defines entrypoints for the tools and documentation pipeline.
 
 Key tasks defined in `deno.json` include:
 
@@ -32,7 +32,7 @@ Key tasks defined in `deno.json` include:
 - `dev-tool`: Runs the development inspection CLI.
 - `test`: Runs the colocated test runner.
 - `test:smoke`: Runs the smoke test runner.
-- `docs-harness`: Runs the documentation generation and verification harness.
+- `docs-pipeline`: Runs the documentation generation and verification pipeline.
 
 ## Continuous Integration
 
@@ -56,6 +56,6 @@ The `.github/workflows/` directory contains GitHub Actions workflows that automa
 
 ### Maintenance and Documentation
 
-- `.github/workflows/docs_harness.yml`: Automates documentation generation and verification using an LLM harness. It collects an inventory, generates docs, verifies the generated MDX, and runs `docs-harness:audit` with OpenAI-compatible LLMs on scheduled and manual triggers.
+- `.github/workflows/docs_pipeline.yml`: Automates documentation generation and verification using an LLM pipeline. It collects an inventory, generates docs, verifies the generated MDX, and runs `docs-pipeline:audit` with OpenAI-compatible LLMs on scheduled and manual triggers.
 - `.github/workflows/update_lepton.yml`: Scheduled workflow to update Lepton themes by downloading and extracting the latest releases.
 - `.github/workflows/moderation.yml` and `.github/workflows/organize_issue.yml`: Handle content moderation and issue/PR lifecycle management.

@@ -30,7 +30,7 @@ import {
   runLlmAudit,
   verifyLlmAuditResult,
 } from "./llm_audit.ts";
-import { verifyDocsHarness } from "./verifier.ts";
+import { verifyDocsPipeline } from "./verifier.ts";
 import { REQUIRED_GENERATED_PAGE_PATHS } from "./types.ts";
 import type { DocsInventory, GeneratedPage } from "./types.ts";
 
@@ -213,9 +213,9 @@ Deno.test("parseWorkflowRunCommands reads inline and block run commands", () => 
           mkdir -p _dist
           deno install
           deno task feles-build test > _dist/ci.log 2>&1 &
-          deno task docs-harness generate \\
-            --inventory _dist/docs-harness/inventory.json \\
-            --out _dist/docs-harness/generated
+          deno task docs-pipeline generate \\
+            --inventory _dist/docs-pipeline/inventory.json \\
+            --out _dist/docs-pipeline/generated
           test -n "\${DOCS_PUBLISH_TOKEN}"
           for i in {1..300}; do
             sleep 2
@@ -226,7 +226,7 @@ Deno.test("parseWorkflowRunCommands reads inline and block run commands", () => 
 
   assertEquals(commands, [
     "deno install",
-    "deno task docs-harness generate --inventory _dist/docs-harness/inventory.json --out _dist/docs-harness/generated",
+    "deno task docs-pipeline generate --inventory _dist/docs-pipeline/inventory.json --out _dist/docs-pipeline/generated",
     "deno task feles-build test > _dist/ci.log 2>&1 &",
     "deno task test --no-autostart",
     "deno task test:smoke",
@@ -552,27 +552,27 @@ function sampleInventory(): DocsInventory {
           source: { path: "deno.json" },
         },
         {
-          name: "docs-harness:collect",
+          name: "docs-pipeline:collect",
           command:
-            "deno run --allow-read --allow-write=_dist --allow-run=git tools/docs-harness/mod.ts collect",
+            "deno run --allow-read --allow-write=_dist --allow-run=git tools/docs-pipeline/mod.ts collect",
           source: { path: "deno.json" },
         },
         {
-          name: "docs-harness:verify",
+          name: "docs-pipeline:verify",
           command:
-            "deno run --allow-read --allow-write=_dist tools/docs-harness/mod.ts verify",
+            "deno run --allow-read --allow-write=_dist tools/docs-pipeline/mod.ts verify",
           source: { path: "deno.json" },
         },
         {
-          name: "docs-harness:audit",
+          name: "docs-pipeline:audit",
           command:
-            "deno run --allow-read --allow-write=_dist --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT,DOCS_AUDIT_LLM_BASE_URL,DOCS_AUDIT_LLM_MODEL,DOCS_AUDIT_LLM_API_KEY,DOCS_AUDIT_LLM_TEMPERATURE,DOCS_AUDIT_LLM_RESPONSE_FORMAT --allow-net tools/docs-harness/mod.ts audit",
+            "deno run --allow-read --allow-write=_dist --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT,DOCS_AUDIT_LLM_BASE_URL,DOCS_AUDIT_LLM_MODEL,DOCS_AUDIT_LLM_API_KEY,DOCS_AUDIT_LLM_TEMPERATURE,DOCS_AUDIT_LLM_RESPONSE_FORMAT --allow-net tools/docs-pipeline/mod.ts audit",
           source: { path: "deno.json" },
         },
         {
-          name: "test:docs-harness",
+          name: "test:docs-pipeline",
           command:
-            "deno test --allow-read --allow-write --allow-net=127.0.0.1 tools/docs-harness/",
+            "deno test --allow-read --allow-write --allow-net=127.0.0.1 tools/docs-pipeline/",
           source: { path: "deno.json" },
         },
       ],
@@ -807,7 +807,7 @@ async function writeSampleGeneratedPages(
   await Deno.remove(`${dir}/_prompt`, { recursive: true });
 }
 
-Deno.test("verifyDocsHarness rejects stale generated command examples", async () => {
+Deno.test("verifyDocsPipeline rejects stale generated command examples", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -816,7 +816,7 @@ Deno.test("verifyDocsHarness rejects stale generated command examples", async ()
       "Use `deno task dev` for setup. See tools/feles-build.ts.",
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) => issue.message.includes("stale command")),
       "expected stale command issue",
@@ -826,7 +826,7 @@ Deno.test("verifyDocsHarness rejects stale generated command examples", async ()
   }
 });
 
-Deno.test("verifyDocsHarness does not treat dev-tool as stale dev task", async () => {
+Deno.test("verifyDocsPipeline does not treat dev-tool as stale dev task", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -835,14 +835,14 @@ Deno.test("verifyDocsHarness does not treat dev-tool as stale dev task", async (
       "Use `deno task dev-tool`. See deno.json.",
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assertEquals(issues, []);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
 });
 
-Deno.test("verifyDocsHarness rejects unknown deno task commands", async () => {
+Deno.test("verifyDocsPipeline rejects unknown deno task commands", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -851,7 +851,7 @@ Deno.test("verifyDocsHarness rejects unknown deno task commands", async () => {
       "Run `deno task test:integration`. See deno.json.",
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) => issue.message.includes("unknown deno task")),
       "expected unknown deno task issue",
@@ -861,7 +861,7 @@ Deno.test("verifyDocsHarness rejects unknown deno task commands", async () => {
   }
 });
 
-Deno.test("verifyDocsHarness allows explicitly framed drift strings", async () => {
+Deno.test("verifyDocsPipeline allows explicitly framed drift strings", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -877,14 +877,14 @@ Deno.test("verifyDocsHarness allows explicitly framed drift strings", async () =
       ].join("\n"),
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assertEquals(issues, []);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
 });
 
-Deno.test("verifyDocsHarness rejects missing required generated pages", async () => {
+Deno.test("verifyDocsPipeline rejects missing required generated pages", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await Deno.mkdir(`${dir}/development`, { recursive: true });
@@ -893,7 +893,7 @@ Deno.test("verifyDocsHarness rejects missing required generated pages", async ()
       "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) => issue.message.includes("missing required page")),
       "expected missing required page issue",
@@ -903,7 +903,7 @@ Deno.test("verifyDocsHarness rejects missing required generated pages", async ()
   }
 });
 
-Deno.test("verifyDocsHarness rejects raw MDX angle brackets outside fences", async () => {
+Deno.test("verifyDocsPipeline rejects raw MDX angle brackets outside fences", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -912,7 +912,7 @@ Deno.test("verifyDocsHarness rejects raw MDX angle brackets outside fences", asy
       "Use `feles-build build --phase <before-mach|after-mach>`. See tools/feles-build.ts.",
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) => issue.message.includes("raw angle brackets")),
       "expected raw angle bracket issue",
@@ -922,7 +922,7 @@ Deno.test("verifyDocsHarness rejects raw MDX angle brackets outside fences", asy
   }
 });
 
-Deno.test("verifyDocsHarness rejects MDX executable syntax", async () => {
+Deno.test("verifyDocsPipeline rejects MDX executable syntax", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -935,7 +935,7 @@ Deno.test("verifyDocsHarness rejects MDX executable syntax", async () => {
       ].join("\n"),
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) => issue.message.includes("MDX ESM")),
       "expected MDX ESM issue",
@@ -949,7 +949,7 @@ Deno.test("verifyDocsHarness rejects MDX executable syntax", async () => {
   }
 });
 
-Deno.test("verifyDocsHarness allows public LLM env key names but rejects publish tokens", async () => {
+Deno.test("verifyDocsPipeline allows public LLM env key names but rejects publish tokens", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -962,7 +962,7 @@ Deno.test("verifyDocsHarness allows public LLM env key names but rejects publish
       ].join("\n"),
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) =>
         issue.message.includes("secret or credential identifiers")
@@ -974,7 +974,7 @@ Deno.test("verifyDocsHarness allows public LLM env key names but rejects publish
   }
 });
 
-Deno.test("verifyDocsHarness rejects literal escaped newlines", async () => {
+Deno.test("verifyDocsPipeline rejects literal escaped newlines", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -983,7 +983,7 @@ Deno.test("verifyDocsHarness rejects literal escaped newlines", async () => {
       "# Architecture\\n\\nChrome features are discovered from `browser-features/chrome/common/mod.ts`.",
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) => issue.message.includes("literal escape")),
       "expected literal escape issue",
@@ -993,7 +993,7 @@ Deno.test("verifyDocsHarness rejects literal escaped newlines", async () => {
   }
 });
 
-Deno.test("verifyDocsHarness rejects nonexistent referenced source paths", async () => {
+Deno.test("verifyDocsPipeline rejects nonexistent referenced source paths", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -1001,11 +1001,11 @@ Deno.test("verifyDocsHarness rejects nonexistent referenced source paths", async
       `${dir}/development/architecture-overview.mdx`,
       [
         "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
-        "The inventory lives at `tools/docs-harness/inventory.json`.",
+        "The inventory lives at `tools/docs-pipeline/inventory.json`.",
       ].join("\n"),
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) =>
         issue.message.includes("referenced source path does not exist")
@@ -1017,7 +1017,7 @@ Deno.test("verifyDocsHarness rejects nonexistent referenced source paths", async
   }
 });
 
-Deno.test("verifyDocsHarness rejects unusable CI summaries", async () => {
+Deno.test("verifyDocsPipeline rejects unusable CI summaries", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir, sampleInventoryWithCiCommands());
@@ -1031,7 +1031,7 @@ Deno.test("verifyDocsHarness rejects unusable CI summaries", async () => {
       ].join("\n"),
     );
 
-    const issues = await verifyDocsHarness(
+    const issues = await verifyDocsPipeline(
       sampleInventoryWithCiCommands(),
       dir,
     );
@@ -1177,7 +1177,7 @@ Deno.test("writeGeneratedDocs generates Floorp OS API layer docs from inventory"
   }
 });
 
-Deno.test("verifyDocsHarness rejects stale deterministic catalog pages", async () => {
+Deno.test("verifyDocsPipeline rejects stale deterministic catalog pages", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -1189,7 +1189,7 @@ Deno.test("verifyDocsHarness rejects stale deterministic catalog pages", async (
       ].join("\n"),
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assert(
       issues.some((issue) =>
         issue.message.includes("deterministic generated page is stale")
@@ -1201,7 +1201,7 @@ Deno.test("verifyDocsHarness rejects stale deterministic catalog pages", async (
   }
 });
 
-Deno.test("verifyDocsHarness ignores volatile commit changes in deterministic pages", async () => {
+Deno.test("verifyDocsPipeline ignores volatile commit changes in deterministic pages", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const generatedInventory = sampleInventory();
@@ -1211,7 +1211,7 @@ Deno.test("verifyDocsHarness ignores volatile commit changes in deterministic pa
       ...generatedInventory,
       floorpCommit: "synthetic-pr-merge-commit",
     };
-    const issues = await verifyDocsHarness(pullRequestInventory, dir);
+    const issues = await verifyDocsPipeline(pullRequestInventory, dir);
 
     assertEquals(issues, []);
   } finally {
@@ -1240,7 +1240,7 @@ Deno.test("seedCodexDocs writes required docs and prompt", async () => {
     }
 
     const prompt = await Deno.readTextFile(promptPath);
-    assert(prompt.includes("_dist/docs-harness/inventory.json"));
+    assert(prompt.includes("_dist/docs-pipeline/inventory.json"));
     assert(prompt.includes("architecture-overview.mdx"));
     assert(prompt.includes("browser-features/chrome/common/mod.ts"));
     assert(!prompt.includes("TOKEN"));
@@ -1322,7 +1322,7 @@ Deno.test("codexAuditSchema requires pass and finding fields", () => {
   ]);
 });
 
-Deno.test("verifyDocsHarness accepts source-backed generated MDX", async () => {
+Deno.test("verifyDocsPipeline accepts source-backed generated MDX", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await writeSampleGeneratedPages(dir);
@@ -1334,7 +1334,7 @@ Deno.test("verifyDocsHarness accepts source-backed generated MDX", async () => {
       ].join("\n"),
     );
 
-    const issues = await verifyDocsHarness(sampleInventory(), dir);
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
     assertEquals(issues, []);
   } finally {
     await Deno.remove(dir, { recursive: true });

@@ -18,11 +18,11 @@ import {
   runLlmAudit,
   verifyLlmAuditFile,
 } from "./llm_audit.ts";
-import { verifyDocsHarness } from "./verifier.ts";
+import { verifyDocsPipeline } from "./verifier.ts";
 import type { DocsInventory } from "./types.ts";
 
 const HELP = `
-Usage: deno task docs-harness <command> [options]
+Usage: deno task docs-pipeline <command> [options]
 
 Commands:
   collect    Generate deterministic Floorp docs inventory JSON
@@ -110,17 +110,17 @@ async function verifyCommand(args: string[]): Promise<void> {
 
   const inventoryPath = ensureString(parsed.inventory, "--inventory");
   const inventory = await readInventory(inventoryPath);
-  const issues = await verifyDocsHarness(inventory, parsed["docs-dir"]);
+  const issues = await verifyDocsPipeline(inventory, parsed["docs-dir"]);
   if (issues.length === 0) {
-    console.log("Docs harness verification passed.");
+    console.log("Docs pipeline verification passed.");
     return;
   }
 
   for (const issue of issues) {
-    console.error(`[docs-harness] ${issue.path}: ${issue.message}`);
+    console.error(`[docs-pipeline] ${issue.path}: ${issue.message}`);
   }
   throw new Error(
-    `Docs harness verification failed with ${issues.length} issue(s)`,
+    `Docs pipeline verification failed with ${issues.length} issue(s)`,
   );
 }
 
@@ -236,7 +236,7 @@ export async function main(argv = Deno.args): Promise<void> {
       console.log(HELP);
       return;
     default:
-      throw new Error(`Unknown docs-harness command: ${command}`);
+      throw new Error(`Unknown docs-pipeline command: ${command}`);
   }
 }
 
@@ -245,7 +245,7 @@ if (import.meta.main) {
     await main();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[docs-harness] ${message}`);
+    console.error(`[docs-pipeline] ${message}`);
     Deno.exit(1);
   }
 }

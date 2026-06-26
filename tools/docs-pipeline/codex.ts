@@ -136,7 +136,7 @@ function buildCodexGenerationPrompt(
     "",
     "## Inputs",
     "",
-    "- Inventory JSON: `_dist/docs-harness/inventory.json`",
+    "- Inventory JSON: `_dist/docs-pipeline/inventory.json`",
     "- Output files to edit:",
     ...prosePages.map((pagePath) =>
       `  - \`${normalizedOutputDir}/${pagePath}\``
@@ -161,7 +161,7 @@ function buildCodexGenerationPrompt(
     "- Use nested headings inside each directory page for important child directories and files.",
     "- Be comprehensive: prefer concrete implementation details, ownership boundaries, lifecycle ordering, extension points, failure modes, and verification commands over high-level summaries.",
     "- Target roughly 1,500 to 2,500 words per prose page when the available sources support it.",
-    "- After writing the target file, stop. Do not run verification; the Deno harness runs verification after you exit.",
+    "- After writing the target file, stop. Do not run verification; the Deno pipeline runs verification after you exit.",
     "",
     "## Page Requirements",
     "",
@@ -176,7 +176,7 @@ function buildCodexGenerationPrompt(
     "- `directories/browser-features/pages-settings/overview.mdx`: explain the settings pages subtree, the React/Tailwind page-bundle boundary, and how it differs from loader-managed chrome features and Window Actors.",
     "- `directories/browser-features/pages-settings/build.mdx`: deeply explain the settings Vite config, React SWC/Tailwind/plugins, chrome packaging, dev CSP behavior, output ownership, and build failure modes.",
     "- `directories/browser-features/pages-settings/routing.mdx`: deeply explain settings bootstrap from `src/main.tsx`, hash-seeded MemoryRouter behavior, `src/App.tsx` route ownership, route extension points, and runtime failure modes.",
-    "- `directories/tools-and-ci.mdx`: deeply explain `tools` and `.github/workflows`, including feles-build responsibilities, dev-tool inspection, colocated browser test discovery/filtering/autostart/result collection, docs harness workflow boundaries, and CI verification responsibilities.",
+    "- `directories/tools-and-ci.mdx`: deeply explain `tools` and `.github/workflows`, including feles-build responsibilities, dev-tool inspection, colocated browser test discovery/filtering/autostart/result collection, docs pipeline workflow boundaries, and CI verification responsibilities.",
     "- `directories/static-gecko.mdx`: deeply explain `static/gecko`, especially pref override ownership, what defaults belong there, what should stay in TypeScript layers, and how Gecko defaults interact with loader/runtime code.",
     "",
     `Output directory: \`${normalizedOutputDir}\``,

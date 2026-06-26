@@ -678,7 +678,7 @@ async function collectChromeFeatureEntries(
         // Directories without an index.ts are not loader-discovered features.
         continue;
       }
-      console.error("[DocsHarness]", `Failed to read ${sourcePath}`, error);
+      console.error("[DocsPipeline]", `Failed to read ${sourcePath}`, error);
       throw error;
     }
   }
@@ -774,7 +774,7 @@ const ARCHITECTURE_REFERENCE_SOURCES:
       area: "Root Deno tasks",
       source: { path: "deno.json" },
       summary:
-        "Defines task entrypoints, imports, workspace packages, and docs harness commands.",
+        "Defines task entrypoints, imports, workspace packages, and docs pipeline commands.",
     },
   ];
 

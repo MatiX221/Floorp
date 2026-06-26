@@ -373,7 +373,7 @@ async function verifyDeterministicPagesAreFresh(
   relativeFiles: ReadonlySet<string>,
 ): Promise<VerificationIssue[]> {
   const issues: VerificationIssue[] = [];
-  const verifyRoot = path.join(PROJECT_ROOT, "_dist", "docs-harness");
+  const verifyRoot = path.join(PROJECT_ROOT, "_dist", "docs-pipeline");
   await Deno.mkdir(verifyRoot, { recursive: true });
   const tempDir = await Deno.makeTempDir({
     dir: verifyRoot,
@@ -403,7 +403,7 @@ async function verifyDeterministicPagesAreFresh(
         issues.push({
           path: pagePath,
           message:
-            "deterministic generated page is stale; rerun docs-harness generation",
+            "deterministic generated page is stale; rerun docs-pipeline generation",
         });
       }
     }
@@ -439,7 +439,7 @@ async function collectMdxFiles(docsDir: string): Promise<string[]> {
   return files.sort();
 }
 
-export async function verifyDocsHarness(
+export async function verifyDocsPipeline(
   inventory: DocsInventory,
   docsDir?: string,
 ): Promise<VerificationIssue[]> {

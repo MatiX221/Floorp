@@ -271,7 +271,7 @@ function generationMessages(
         "Do not present known drift strings as current commands or APIs.",
         "For CI, only say a workflow runs a command when that exact command appears in the workflow runCommands inventory.",
         "For CI, list representative raw runCommands from the inventory; never write None for a workflow that has runCommands.",
-        "For CI/test docs, focus on .github/workflows/colocated_runner_test.yml and .github/workflows/docs_harness.yml; avoid release, publish, signing, and deployment commands.",
+        "For CI/test docs, focus on .github/workflows/colocated_runner_test.yml and .github/workflows/docs_pipeline.yml; avoid release, publish, signing, and deployment commands.",
         "For authored architecture and directory pages, prefer comprehensive nested explanations over shallow summaries when the inventory provides enough source evidence.",
         "Use real Markdown newlines. Do not include literal \\n or \\t escape sequences in MDX body text.",
         "Write English Docusaurus-compatible MDX body content.",
@@ -952,7 +952,7 @@ function buildBrowserFeaturesCatalogOverview(
     "",
     "## Auto-Updated Nested Catalogs",
     "",
-    "The nested common-feature and actor catalogs are generated from the same inventory. When a feature directory or BrowserGlue actor changes, assigned category tables and the uncategorized fallback lists update during the next docs-harness generation run.",
+    "The nested common-feature and actor catalogs are generated from the same inventory. When a feature directory or BrowserGlue actor changes, assigned category tables and the uncategorized fallback lists update during the next docs-pipeline generation run.",
   ].join("\n");
 }
 
@@ -1403,7 +1403,7 @@ function buildCiTestReference(inventory: DocsInventory): string {
     workflow.path === ".github/workflows/colocated_runner_test.yml"
   );
   const docsWorkflow = inventory.ci.workflows.find((workflow) =>
-    workflow.path === ".github/workflows/docs_harness.yml"
+    workflow.path === ".github/workflows/docs_pipeline.yml"
   );
 
   const browserCommands = selectCommands(browserWorkflow?.runCommands ?? [], [
@@ -1413,14 +1413,14 @@ function buildCiTestReference(inventory: DocsInventory): string {
     "deno test -A tools/src/colocated_test_runner.test.ts",
   ]);
   const docsCommands = selectCommands(docsWorkflow?.runCommands ?? [], [
-    "deno task docs-harness:collect",
-    "deno task docs-harness:verify",
-    "deno task test:docs-harness",
-    "deno task docs-harness:audit",
-    "deno task docs-harness collect",
-    "deno task docs-harness generate",
-    "deno task docs-harness verify",
-    "deno task docs-harness audit",
+    "deno task docs-pipeline:collect",
+    "deno task docs-pipeline:verify",
+    "deno task test:docs-pipeline",
+    "deno task docs-pipeline:audit",
+    "deno task docs-pipeline collect",
+    "deno task docs-pipeline generate",
+    "deno task docs-pipeline verify",
+    "deno task docs-pipeline audit",
   ]);
 
   return [
@@ -1442,9 +1442,11 @@ function buildCiTestReference(inventory: DocsInventory): string {
     ...browserCommands,
     "```",
     "",
-    "## Docs Harness Workflow",
+    "## Docs Pipeline Workflow",
     "",
-    `Source: \`${docsWorkflow?.path ?? ".github/workflows/docs_harness.yml"}\``,
+    `Source: \`${
+      docsWorkflow?.path ?? ".github/workflows/docs_pipeline.yml"
+    }\``,
     "",
     `Triggers: ${formatList(docsWorkflow?.triggers ?? [])}`,
     "",
@@ -1456,13 +1458,13 @@ function buildCiTestReference(inventory: DocsInventory): string {
     "",
     "## Local Verification Commands",
     "",
-    "Use these source-backed commands when checking the docs harness locally:",
+    "Use these source-backed commands when checking the docs pipeline locally:",
     "",
     "```bash",
-    "deno task docs-harness:collect --out _dist/docs-harness/inventory.json",
-    "deno task docs-harness:verify --inventory _dist/docs-harness/inventory.json",
-    "deno task docs-harness:audit --inventory _dist/docs-harness/inventory.json --docs-dir docs --out _dist/docs-harness/llm/audit.json",
-    "deno task test:docs-harness",
+    "deno task docs-pipeline:collect --out _dist/docs-pipeline/inventory.json",
+    "deno task docs-pipeline:verify --inventory _dist/docs-pipeline/inventory.json",
+    "deno task docs-pipeline:audit --inventory _dist/docs-pipeline/inventory.json --docs-dir docs --out _dist/docs-pipeline/llm/audit.json",
+    "deno task test:docs-pipeline",
     "```",
   ].join("\n");
 }
