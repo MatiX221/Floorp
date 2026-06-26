@@ -40,7 +40,7 @@ type ActorCategory = {
   names: string[];
 };
 
-const LLM_REQUEST_TIMEOUT_MS = 300_000;
+const LLM_REQUEST_TIMEOUT_MS = 900_000;
 
 const COMMON_FEATURE_CATEGORIES: CommonFeatureCategory[] = [
   {

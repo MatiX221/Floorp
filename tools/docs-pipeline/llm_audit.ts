@@ -18,7 +18,7 @@ type ChatResponse = {
   }>;
 };
 
-const LLM_AUDIT_REQUEST_TIMEOUT_MS = 300_000;
+const LLM_AUDIT_REQUEST_TIMEOUT_MS = 900_000;
 
 export type LlmAuditResult = {
   pass: boolean;

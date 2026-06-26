@@ -155,14 +155,17 @@ jobs:
             echo "DOCS_LLM_API_KEY or DOCS_AUDIT_LLM_API_KEY is required when auditing with Ollama Cloud."
             exit 1
           fi
+          echo "::add-mask::${base_url}"
+          echo "::add-mask::${audit_base_url}"
+          mkdir -p _dist/docs-pipeline
           {
-            printf 'DOCS_LLM_BASE_URL=%s\n' "${base_url}"
-            printf 'DOCS_LLM_MODEL=%s\n' "${model}"
-            printf 'DOCS_LLM_TEMPERATURE=%s\n' "${temperature}"
-            printf 'DOCS_AUDIT_LLM_BASE_URL=%s\n' "${audit_base_url}"
-            printf 'DOCS_AUDIT_LLM_MODEL=%s\n' "${audit_model}"
-            printf 'DOCS_AUDIT_LLM_TEMPERATURE=%s\n' "${audit_temperature}"
-          } >> "${GITHUB_ENV}"
+            printf 'export DOCS_LLM_BASE_URL=%q\n' "${base_url}"
+            printf 'export DOCS_LLM_MODEL=%q\n' "${model}"
+            printf 'export DOCS_LLM_TEMPERATURE=%q\n' "${temperature}"
+            printf 'export DOCS_AUDIT_LLM_BASE_URL=%q\n' "${audit_base_url}"
+            printf 'export DOCS_AUDIT_LLM_MODEL=%q\n' "${audit_model}"
+            printf 'export DOCS_AUDIT_LLM_TEMPERATURE=%q\n' "${audit_temperature}"
+          } > _dist/docs-pipeline/llm.env
 
       - name: Collect docs inventory
         run: deno task docs-pipeline:collect --out _dist/docs-pipeline/inventory.json
@@ -172,6 +175,8 @@ jobs:
           DOCS_LLM_API_KEY: ${{ secrets.DOCS_LLM_API_KEY }}
           DOCS_LLM_RESPONSE_FORMAT: ${{ vars.DOCS_LLM_RESPONSE_FORMAT }}
         run: |
+          set -euo pipefail
+          source _dist/docs-pipeline/llm.env
           deno task docs-pipeline:generate \
             --inventory _dist/docs-pipeline/inventory.json \
             --out docs
@@ -205,6 +210,8 @@ jobs:
           DOCS_AUDIT_LLM_TEMPERATURE: ${{ vars.DOCS_AUDIT_LLM_TEMPERATURE }}
           DOCS_AUDIT_LLM_RESPONSE_FORMAT: ${{ vars.DOCS_AUDIT_LLM_RESPONSE_FORMAT }}
         run: |
+          set -euo pipefail
+          source _dist/docs-pipeline/llm.env
           deno task docs-pipeline:audit \
             --inventory _dist/docs-pipeline/inventory.json \
             --docs-dir docs \
