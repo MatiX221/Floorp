@@ -1,0 +1,217 @@
+---
+title: "Common Chrome Features"
+sidebar_label: "Common"
+floorp_commit: "69f56f067cbdc722e290f2dfebb9c3e3f3ef60e9"
+generated: true
+---
+## Overview
+
+The `browser-features/chrome/common/` directory contains Floorp's runtime-oriented browser chrome features. Each feature lives in its own subdirectory with an `index.ts` entrypoint and is discovered automatically by a glob pattern. This page documents the discovery mechanism, the shared module contract, and the individual feature modules that ship under `common/`.
+
+## Feature Discovery
+
+Common chrome features are discovered by a glob scan over the `common/` directory. The discovery pattern is defined in `browser-features/chrome/common/mod.ts` as `./*/index.ts`, meaning every immediate child directory that contains an `index.ts` file is treated as a registrable feature module.
+
+This glob-based approach means that adding a new feature only requires creating a new subdirectory with an `index.ts` that exports the expected entrypoints. There is no central hand-maintained registry list in `mod.ts`; the directory structure itself is the registry.
+
+The loader layer then builds module maps from these chrome feature entry globs, as implemented in `bridge/loader-features/loader/modules.ts`. At runtime, the loader entrypoint in `bridge/loader-features/loader/index.ts` filters enabled modules and runs their lifecycle hooks.
+
+## Module Contract
+
+Every common chrome feature module follows a consistent entrypoint contract:
+
+- A **default class export** that owns the feature's lifecycle. The class name typically matches the feature name (for example, `Workspaces`, `TabBar`, `StatusBar`).
+- An **`init` method** that performs runtime initialization, such as wiring components, services, and styles.
+- Some modules expose an additional **`initBeforeSessionStoreInit`** method for initialization that must occur before the session store is restored. For example, the `ui-custom` feature exposes both `init` and `initBeforeSessionStoreInit` (`browser-features/chrome/common/ui-custom/index.ts`).
+
+Modules typically wire internal sub-resources such as services, components, configuration objects, and inline styles. These are referenced as relative imports within each feature directory (for example, `service`, `config`, `components/*`, `style.css?inline`).
+
+## Feature Modules
+
+The following sections describe each feature module found under `browser-features/chrome/common/`.
+
+### Addons
+
+Customizes the addon installation confirmation popup to display Chrome Web Store-specific messages when installing Chrome extensions. Exports a default `Addons` class with an `init` entrypoint.
+
+Source: `browser-features/chrome/common/addons/index.ts`
+
+### Browser Share Mode
+
+Owns the browser share mode feature through the `BrowserShareMode` chrome component and wires the `browser-share-mode` resource. Exports a default `BrowserShareMode` class with `init`.
+
+Source: `browser-features/chrome/common/browser-share-mode/index.ts`
+
+### Browser Tab Color
+
+Owns the browser tab color feature through the `BrowserTabColor` chrome component and wires `tabcolor-manager`. Exports a default `BrowserTabColor` class with `init`.
+
+Source: `browser-features/chrome/common/browser-tab-color/index.ts`
+
+### Chrome CSS
+
+Owns the chrome CSS feature through the `ChromeCSS` chrome component and wires a `service` resource. Exports a default `ChromeCSS` class with `init`.
+
+Source: `browser-features/chrome/common/chrome-css/index.ts`
+
+### Command Palette
+
+Owns the command palette feature through the `CommandPalette` chrome component. It wires three resources: `service`, `components/CommandPalette`, and `style.css?inline`. Exports a default `CommandPalette` class with `init`.
+
+Source: `browser-features/chrome/common/command-palette/index.ts`
+
+### Context Menu
+
+Owns the context menu feature through the `ContextMenu` chrome component. Exports a default `ContextMenu` class with `init`.
+
+Source: `browser-features/chrome/common/context-menu/index.ts`
+
+### Designs
+
+Owns the designs feature through the `Designs` chrome component and wires `browser-design-element`. Exports a default `Designs` class with `init`.
+
+Source: `browser-features/chrome/common/designs/index.ts`
+
+### External Browser
+
+Owns the external browser feature through the `ExternalBrowser` chrome component. It wires `tab-context-menu` and `link-context-menu` resources. Exports a default `ExternalBrowser` class with `init`.
+
+Source: `browser-features/chrome/common/external-browser/index.ts`
+
+### Flex Order
+
+Owns the flex order feature through the `FlexOrder` chrome component and wires `flex-order`. Exports a default `FlexOrder` class with `init`.
+
+Source: `browser-features/chrome/common/flex-order/index.ts`
+
+### Hub Panel Menu
+
+Owns the hub panel menu feature through the `HubPanelMenuComponent` chrome component and wires `HubPanelMenu`. Exports a default `HubPanelMenuComponent` class with `init`.
+
+Source: `browser-features/chrome/common/hub-panel-menu/index.ts`
+
+### Keyboard Shortcut
+
+Owns the keyboard shortcut feature through the `KeyboardShortcut` chrome component. It wires `service` and `config` resources. Exports a default `KeyboardShortcut` class with `init`.
+
+Source: `browser-features/chrome/common/keyboard-shortcut/index.ts`
+
+### Modal Parent
+
+Owns the modal parent feature through the `ModalParent` chrome component. It wires `modalManager`, `modalElement`, and `data/data` resources. Exports a default `ModalParent` class with `init`.
+
+Source: `browser-features/chrome/common/modal-parent/index.ts`
+
+### Mouse Gesture
+
+Owns the mouse gesture feature through the `MouseGesture` chrome component. It wires `service`, `config`, and `components/GestureDisplay` resources. Exports a default `MouseGesture` class with `init`.
+
+Source: `browser-features/chrome/common/mouse-gesture/index.ts`
+
+### Panel Sidebar
+
+Owns the panel sidebar feature through the `PanelSidebar` chrome component. It wires `components/panel-sidebar`, `components/sidebar`, and `components/sidebar-contextMenu`. Exports a default `PanelSidebar` class with `init`.
+
+Source: `browser-features/chrome/common/panel-sidebar/index.ts`
+
+### Private Container
+
+Owns the private container feature through the `PrivateContainer` chrome component. It wires `browser-private-container` and `context-menu` resources. Exports a default `PrivateContainer` class with `init`.
+
+Source: `browser-features/chrome/common/private-container/index.ts`
+
+### Profile Manager
+
+Owns the profile manager feature through the `ProfileManager` chrome component and wires a `service` resource. Exports a default `ProfileManager` class with `init`.
+
+Source: `browser-features/chrome/common/profile-manager/index.ts`
+
+### PWA
+
+Owns the Progressive Web App feature through the `Pwa` chrome component. It wires `SsbPageAction`, `SsbPanelView`, and `config` resources. Exports a default `Pwa` class with `init`.
+
+Source: `browser-features/chrome/common/pwa/index.ts`
+
+### QR Code Generator
+
+Owns the QR code generator feature through the `QRCodeGenerator` chrome component. It wires `qr-code-button`, `qr-code-panel`, and `style.css?inline`. Exports a default `QRCodeGenerator` class with `init`.
+
+Source: `browser-features/chrome/common/qr-code-generator/index.ts`
+
+### Reboot Panel Menu
+
+Owns the reboot panel menu feature through the `RebootPanelMenuComponent` chrome component and wires `RebootPanelMenu`. Exports a default `RebootPanelMenuComponent` class with `init`.
+
+Source: `browser-features/chrome/common/reboot-panel-menu/index.ts`
+
+### Reverse Sidebar Position
+
+Provides initialization for the reverse sidebar position feature. Unlike most modules, this one exposes only an `init` entrypoint without a default class export.
+
+Source: `browser-features/chrome/common/reverse-sidebar-position/index.ts`
+
+### Split View
+
+Owns the split view feature through the `SplitView` chrome component and wires `split-view-manager`. Exports a default `SplitView` class with `init`.
+
+Source: `browser-features/chrome/common/split-view/index.ts`
+
+### Status Bar
+
+Owns the status bar feature through the `StatusBar` chrome component. It wires `context-menu`, `statusbar`, and `statusbar-manager` resources. Exports a default `StatusBar` class with `init`.
+
+Source: `browser-features/chrome/common/statusbar/index.ts`
+
+### Tab
+
+Owns the tab feature through the `Tab` chrome component. It wires `scroll`, `openPosition`, and `sizeSpecification` resources. Exports a default `Tab` class with `init`.
+
+Source: `browser-features/chrome/common/tab/index.ts`
+
+### Tab Sleep Exclusion
+
+Owns the tab sleep exclusion feature through the `TabSleepExclusion` chrome component. Exports a default `TabSleepExclusion` class with `init`.
+
+Source: `browser-features/chrome/common/tab-sleep-exclusion/index.ts`
+
+### Tab Bar
+
+Owns the tab bar feature through the `TabBar` chrome component. It wires `multirow-tabbar/multirow-tabbar` and `tabbbar-style/tabbar-style` resources. Exports a default `TabBar` class with `init`.
+
+Source: `browser-features/chrome/common/tabbar/index.ts`
+
+### UI Custom
+
+Owns the UI customization feature through the `UICustomization` chrome component. It wires `styles/style-manager` and `layout/dom-manipulator` resources. This is one of the few modules that exposes `initBeforeSessionStoreInit` in addition to `init`, allowing it to perform setup before the session store restores state. Exports a default `UICustomization` class.
+
+Source: `browser-features/chrome/common/ui-custom/index.ts`
+
+### Undo Closed Tab
+
+Owns the undo closed tab feature through the `UndoClosedTab` chrome component and wires `styleElem`. Exports a default `UndoClosedTab` class with `init`.
+
+Source: `browser-features/chrome/common/undo-closed-tab/index.ts`
+
+### Workspaces
+
+Owns the workspaces feature through the `Workspaces` chrome component. It wires `workspacesTabManager`, `utils/workspace-icons`, and `workspacesService` resources. Exports a default `Workspaces` class with `init`.
+
+Source: `browser-features/chrome/common/workspaces/index.ts`
+
+### Zen Mode
+
+Owns the zen mode feature through the `ZenMode` chrome component. It wires `zen-mode` and `styleElem` resources. Exports a default `ZenMode` class with `init`.
+
+Source: `browser-features/chrome/common/zen-mode/index.ts`
+
+## Relationship to the Loader
+
+The common chrome features are consumed by the bridge loader infrastructure. The module map construction in `bridge/loader-features/loader/modules.ts` builds common and static module maps from chrome feature entry globs. The loader entrypoint in `bridge/loader-features/loader/index.ts` then imports `BrowserGlue`, initializes i18n, records loader state, filters enabled modules, and runs module lifecycle hooks.
+
+Module load-state resolution and `onModuleLoaded` promises are provided by `bridge/loader-features/loader/modules-hooks.ts`, which the loader uses to coordinate dependencies between feature modules during initialization.
+
+The production loader path is `chrome://noraneko/content/core.js`, while development and test environments use HTTP-based loaders served from port 5181, as configured in `bridge/startup/src/chrome_root.ts` and `bridge/loader-features/vite.config.ts`.
+
+## Relationship to Static Chrome Features
+
+In addition to the `common/` directory, Floorp maintains a `browser-features/chrome/static/` directory for features that require pre-session or static initialization. Static feature discovery is provided by `browser-features/chrome/static/mod.ts`. The static features include `downloadbar`, `overrides`, and `prefs`, where `prefs` also exposes an `initBeforeSessionStoreInit` entrypoint. Both common and static module maps are built together by the loader's module registry.

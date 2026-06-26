@@ -1,0 +1,50 @@
+---
+title: "CI & Test Reference"
+sidebar_label: "CI & Tests"
+floorp_commit: "69f56f067cbdc722e290f2dfebb9c3e3f3ef60e9"
+generated: true
+---
+# CI & Test Reference
+
+This page is generated from GitHub Actions workflow files and Deno task definitions. It intentionally focuses on test and documentation workflows rather than release, publishing, signing, or deployment jobs.
+
+## Browser Integration Workflow
+
+Source: `.github/workflows/colocated_runner_test.yml`
+
+Triggers: `pull_request`, `push`, `workflow_dispatch`
+
+The browser integration workflow starts a virtual display, launches Floorp through `feles-build test`, waits for Marionette, and then runs colocated browser tests against that running instance.
+
+```bash
+deno task test:smoke
+deno task feles-build test > _dist/ci-feles-build-test.log 2>&1 &
+deno task test --no-autostart
+deno test -A tools/src/colocated_test_runner.test.ts
+```
+
+## Docs Harness Workflow
+
+Source: `.github/workflows/docs_harness.yml`
+
+Triggers: `pull_request`, `push`, `schedule`, `workflow_dispatch`
+
+Pull requests collect and verify the deterministic inventory without calling an LLM. Manual dispatch and the weekly schedule generate MDX under the docs/development directory with an OpenAI-compatible LLM, verify it, run an LLM audit, and upload the generated docs artifact for review.
+
+```bash
+deno task docs-harness:collect --out _dist/docs-harness/inventory.json
+deno task docs-harness:verify --inventory _dist/docs-harness/inventory.json
+deno task test:docs-harness
+deno task docs-harness:audit --inventory _dist/docs-harness/inventory.json --docs-dir docs --out _dist/docs-harness/llm/audit.json
+```
+
+## Local Verification Commands
+
+Use these source-backed commands when checking the docs harness locally:
+
+```bash
+deno task docs-harness:collect --out _dist/docs-harness/inventory.json
+deno task docs-harness:verify --inventory _dist/docs-harness/inventory.json
+deno task docs-harness:audit --inventory _dist/docs-harness/inventory.json --docs-dir docs --out _dist/docs-harness/llm/audit.json
+deno task test:docs-harness
+```

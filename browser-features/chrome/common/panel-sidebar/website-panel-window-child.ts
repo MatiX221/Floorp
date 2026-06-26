@@ -171,7 +171,7 @@ export class WebsitePanelWindowChild {
         min-height: 100% !important;
       }
     `;
-    document.documentElement.appendChild(style);
+    document.documentElement?.appendChild(style);
   }
 
   private getContentContainer(): HTMLElement {
