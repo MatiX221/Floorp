@@ -18,6 +18,8 @@ type ChatResponse = {
   }>;
 };
 
+const LLM_AUDIT_REQUEST_TIMEOUT_MS = 300_000;
+
 export type LlmAuditResult = {
   pass: boolean;
   blocking_findings: string[];
@@ -43,16 +45,20 @@ export function readAuditLlmConfig(env?: Record<string, string>): LlmConfig {
   const baseConfig = readLlmConfig(env);
   const responseFormat = readEnvValue("DOCS_AUDIT_LLM_RESPONSE_FORMAT", env) ??
     (baseConfig.useJsonResponseFormat ? "enabled" : "disabled");
+  const temperature = Number(
+    readEnvValue("DOCS_AUDIT_LLM_TEMPERATURE", env) ??
+      String(baseConfig.temperature),
+  );
+  if (!Number.isFinite(temperature)) {
+    throw new Error("DOCS_AUDIT_LLM_TEMPERATURE must be a finite number");
+  }
 
   return {
     baseUrl: readEnvValue("DOCS_AUDIT_LLM_BASE_URL", env) ?? baseConfig.baseUrl,
     model: readEnvValue("DOCS_AUDIT_LLM_MODEL", env) ?? baseConfig.model,
     apiKey: readEnvValue("DOCS_AUDIT_LLM_API_KEY", env) ||
       baseConfig.apiKey,
-    temperature: Number(
-      readEnvValue("DOCS_AUDIT_LLM_TEMPERATURE", env) ??
-        String(baseConfig.temperature),
-    ),
+    temperature,
     useJsonResponseFormat: responseFormat !== "disabled",
   };
 }
@@ -187,11 +193,7 @@ async function requestAuditResult(
     requestBody.response_format = { type: "json_object" };
   }
 
-  let response = await fetch(joinChatCompletionsUrl(config.baseUrl), {
-    method: "POST",
-    headers,
-    body: JSON.stringify(requestBody),
-  });
+  let response = await fetchAuditChatCompletions(config, headers, requestBody);
 
   if (
     !response.ok &&
@@ -200,11 +202,7 @@ async function requestAuditResult(
   ) {
     await response.body?.cancel();
     delete requestBody.response_format;
-    response = await fetch(joinChatCompletionsUrl(config.baseUrl), {
-      method: "POST",
-      headers,
-      body: JSON.stringify(requestBody),
-    });
+    response = await fetchAuditChatCompletions(config, headers, requestBody);
   }
 
   if (!response.ok) {
@@ -219,6 +217,19 @@ async function requestAuditResult(
   }
 
   return JSON.parse(extractJson(content));
+}
+
+async function fetchAuditChatCompletions(
+  config: LlmConfig,
+  headers: Headers,
+  requestBody: Record<string, unknown>,
+): Promise<Response> {
+  return await fetch(joinChatCompletionsUrl(config.baseUrl), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(LLM_AUDIT_REQUEST_TIMEOUT_MS),
+  });
 }
 
 function joinChatCompletionsUrl(baseUrl: string): string {

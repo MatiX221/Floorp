@@ -56,6 +56,6 @@ The `.github/workflows/` directory contains GitHub Actions workflows that automa
 
 ### Maintenance and Documentation
 
-- `.github/workflows/docs_harness.yml`: Automates documentation generation and verification using an LLM harness. It collects an inventory, generates docs, and verifies them.
+- `.github/workflows/docs_harness.yml`: Automates documentation generation and verification using an LLM harness. It collects an inventory, generates docs, verifies the generated MDX, and runs `docs-harness:audit` with OpenAI-compatible LLMs on scheduled and manual triggers.
 - `.github/workflows/update_lepton.yml`: Scheduled workflow to update Lepton themes by downloading and extracting the latest releases.
 - `.github/workflows/moderation.yml` and `.github/workflows/organize_issue.yml`: Handle content moderation and issue/PR lifecycle management.

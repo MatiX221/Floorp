@@ -36,7 +36,7 @@ Routes are defined in `browser-features/pages-settings/src/App.tsx`. The followi
 | `/features/webapps` | `@/app/pwa/page.tsx` |
 | `/features/floorp-os` | `@/app/floorp-os/page.tsx` |
 | `/features/accounts` | `@/app/accounts/page.tsx` |
-| `features/gesture` | `@/app/gesture/page.tsx` |
+| `/features/gesture` | `@/app/gesture/page.tsx` |
 | `/features/shortcuts` | `@/app/keyboard-shortcut/page.tsx` |
 | `/about/browser` | `./app/about/noraneko.tsx` |
 | `/about/updates` | `@/app/updates/page.tsx` |
@@ -51,7 +51,7 @@ Several settings routes correspond directly to chrome feature modules registered
 - The `/features/workspaces` route maps to the workspaces feature owned by `browser-features/chrome/common/workspaces/index.ts`.
 - The `/features/webapps` route corresponds to the PWA feature owned by `browser-features/chrome/common/pwa/index.ts`.
 - The `/features/shortcuts` route relates to the keyboard shortcut feature owned by `browser-features/chrome/common/keyboard-shortcut/index.ts`.
-- The `features/gesture` route relates to the mouse gesture feature owned by `browser-features/chrome/common/mouse-gesture/index.ts`.
+- The `/features/gesture` route relates to the mouse gesture feature owned by `browser-features/chrome/common/mouse-gesture/index.ts`.
 
 The settings app provides the user-facing configuration UI, while the chrome feature modules implement the browser-side behavior. Communication between the settings page and chrome features flows through Window Actors registered in `browser-features/modules/modules/BrowserGlue.sys.mts`, such as `NRSettings` and `NRPanelSidebar`.
 

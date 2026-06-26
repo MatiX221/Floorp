@@ -280,6 +280,7 @@ function verifyInventory(inventory: DocsInventory): VerificationIssue[] {
     const source of [
       ...inventory.commands.denoTasks.map((task) => task.source.path),
       ...inventory.commands.felesBuild.map((command) => command.source.path),
+      ...inventory.architecture.layers.map((layer) => layer.source.path),
       ...inventory.architecture.referenceSources.map((entry) =>
         entry.source.path
       ),
@@ -459,6 +460,10 @@ export async function verifyDocsHarness(
   const relativeFiles = new Set(
     files.map((file) => normalizeSlashes(path.relative(docsDir, file))),
   );
+  const requiredPathSet = new Set<string>(REQUIRED_GENERATED_PAGE_PATHS);
+  const generatedFiles = files.filter((file) =>
+    requiredPathSet.has(normalizeSlashes(path.relative(docsDir, file)))
+  );
   for (const requiredPath of REQUIRED_GENERATED_PAGE_PATHS) {
     if (!relativeFiles.has(requiredPath)) {
       issues.push({
@@ -476,7 +481,7 @@ export async function verifyDocsHarness(
     ),
   );
 
-  for (const file of files) {
+  for (const file of generatedFiles) {
     const text = await Deno.readTextFile(file);
     const knownDenoTasks = new Set(
       inventory.commands.denoTasks.map((task) => task.name),

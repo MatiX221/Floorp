@@ -53,11 +53,19 @@ export function verifyCodexAuditResult(value: unknown): CodexAuditResult {
   if (typeof candidate.pass !== "boolean") {
     throw new Error("Codex audit result must include boolean pass");
   }
-  if (!Array.isArray(candidate.blocking_findings)) {
-    throw new Error("Codex audit result must include blocking_findings array");
+  if (
+    !Array.isArray(candidate.blocking_findings) ||
+    !candidate.blocking_findings.every((finding) => typeof finding === "string")
+  ) {
+    throw new Error(
+      "Codex audit result must include blocking_findings strings",
+    );
   }
-  if (!Array.isArray(candidate.warnings)) {
-    throw new Error("Codex audit result must include warnings array");
+  if (
+    !Array.isArray(candidate.warnings) ||
+    !candidate.warnings.every((warning) => typeof warning === "string")
+  ) {
+    throw new Error("Codex audit result must include warnings strings");
   }
   if (typeof candidate.recommendation !== "string") {
     throw new Error("Codex audit result must include recommendation string");

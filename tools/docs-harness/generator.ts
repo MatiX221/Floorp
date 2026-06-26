@@ -40,6 +40,8 @@ type ActorCategory = {
   names: string[];
 };
 
+const LLM_REQUEST_TIMEOUT_MS = 300_000;
+
 const COMMON_FEATURE_CATEGORIES: CommonFeatureCategory[] = [
   {
     path:
@@ -226,13 +228,31 @@ export function readLlmConfig(env?: Record<string, string>): LlmConfig {
     throw new Error("DOCS_LLM_MODEL is required for docs generation");
   }
 
+  const temperature = Number(readEnv("DOCS_LLM_TEMPERATURE") ?? "0");
+  if (!Number.isFinite(temperature)) {
+    throw new Error("DOCS_LLM_TEMPERATURE must be a finite number");
+  }
+
   return {
     baseUrl,
     model,
     apiKey: readEnv("DOCS_LLM_API_KEY") || undefined,
-    temperature: Number(readEnv("DOCS_LLM_TEMPERATURE") ?? "0"),
+    temperature,
     useJsonResponseFormat: readEnv("DOCS_LLM_RESPONSE_FORMAT") !== "disabled",
   };
+}
+
+async function fetchChatCompletions(
+  config: LlmConfig,
+  headers: Headers,
+  requestBody: Record<string, unknown>,
+): Promise<Response> {
+  return await fetch(joinChatCompletionsUrl(config.baseUrl), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
+  });
 }
 
 function generationMessages(
@@ -581,14 +601,10 @@ async function requestSingleGeneratedPageOnce(
     headers.set("Authorization", `Bearer ${config.apiKey}`);
   }
 
-  const response = await fetch(joinChatCompletionsUrl(config.baseUrl), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model: config.model,
-      messages: singlePageMessages(inventory, pagePath),
-      temperature: config.temperature,
-    }),
+  const response = await fetchChatCompletions(config, headers, {
+    model: config.model,
+    messages: singlePageMessages(inventory, pagePath),
+    temperature: config.temperature,
   });
 
   if (!response.ok) {
@@ -625,11 +641,7 @@ async function requestGeneratedPayloadOnce(
     requestBody.response_format = { type: "json_object" };
   }
 
-  let response = await fetch(joinChatCompletionsUrl(config.baseUrl), {
-    method: "POST",
-    headers,
-    body: JSON.stringify(requestBody),
-  });
+  let response = await fetchChatCompletions(config, headers, requestBody);
 
   if (
     !response.ok &&
@@ -638,11 +650,7 @@ async function requestGeneratedPayloadOnce(
   ) {
     await response.body?.cancel();
     delete requestBody.response_format;
-    response = await fetch(joinChatCompletionsUrl(config.baseUrl), {
-      method: "POST",
-      headers,
-      body: JSON.stringify(requestBody),
-    });
+    response = await fetchChatCompletions(config, headers, requestBody);
   }
 
   if (!response.ok) {
@@ -1194,6 +1202,9 @@ function buildFloorpOsApiPage(inventory: DocsInventory): string {
     (sum, module) => sum + module.routes.length,
     0,
   );
+  const routeCounts = routeModules
+    .map((module) => `${module.namespace}: ${module.routes.length}`)
+    .join(", ");
 
   return [
     "# Floorp OS API Layer",
@@ -1249,7 +1260,7 @@ function buildFloorpOsApiPage(inventory: DocsInventory): string {
     "",
     "## Route Namespaces",
     "",
-    `The generated inventory currently finds ${routeCount} route registrations across ${routeModules.length} route namespaces.`,
+    `The generated inventory currently lists ${routeCount} concrete route rows across ${routeModules.length} route namespaces. Counts by namespace: ${routeCounts}.`,
     "",
     ...routeModules.flatMap((module) => [
       `### ${module.namespace}`,

@@ -2,8 +2,10 @@
 
 import { assert, assertEquals } from "@std/assert";
 import {
+  extractBridgeLoader,
   extractChromeFeatureDiscovery,
   extractOsApiRouteEntries,
+  extractSettingsRoutes,
   extractSharedOsApiRouteEntries,
   extractWindowActors,
   parseDenoTasksFromText,
@@ -75,6 +77,34 @@ Deno.test("extractChromeFeatureDiscovery reads import.meta.glob pattern", () => 
   `);
 
   assertEquals(discovery.globPattern, "./*/index.ts");
+});
+
+Deno.test("extractSettingsRoutes normalizes displayed route paths", () => {
+  const routes = extractSettingsRoutes(`
+    import MouseGesture from "@/app/gesture/page.tsx";
+    <Route path="features/gesture" element={<MouseGesture />} />
+  `);
+
+  assertEquals(routes[0].route, "/features/gesture");
+  assertEquals(
+    routes[0].source.path,
+    "browser-features/pages-settings/src/App.tsx",
+  );
+});
+
+Deno.test("extractBridgeLoader reads loader URLs from chrome root source", () => {
+  const loader = extractBridgeLoader(`
+    const dev = "http://localhost:5181/loader/index.ts";
+    const test = "http://localhost:5181/loader/test/index.ts";
+    const prod = "chrome://noraneko/content/core.js";
+  `);
+
+  assertEquals(loader.devLoaderUrl, "http://localhost:5181/loader/index.ts");
+  assertEquals(
+    loader.testLoaderUrl,
+    "http://localhost:5181/loader/test/index.ts",
+  );
+  assertEquals(loader.productionLoader, "chrome://noraneko/content/core.js");
 });
 
 Deno.test("extractWindowActors reads addJSWindowActors and actor count", () => {
@@ -217,6 +247,21 @@ Deno.test("readLlmConfig omits empty API keys for local compatible endpoints", (
   assertEquals(config.temperature, 0);
 });
 
+Deno.test("readLlmConfig rejects invalid temperature", () => {
+  let rejected = false;
+  try {
+    readLlmConfig({
+      DOCS_LLM_BASE_URL: "http://localhost:11434/v1",
+      DOCS_LLM_MODEL: "llama3.1",
+      DOCS_LLM_TEMPERATURE: "not-a-number",
+    });
+  } catch {
+    rejected = true;
+  }
+
+  assert(rejected, "invalid generation temperature should be rejected");
+});
+
 Deno.test("readAuditLlmConfig falls back to generation config", () => {
   const config = readAuditLlmConfig({
     DOCS_LLM_BASE_URL: "https://ollama.com/v1",
@@ -229,6 +274,21 @@ Deno.test("readAuditLlmConfig falls back to generation config", () => {
   assertEquals(config.baseUrl, "https://ollama.com/v1");
   assertEquals(config.model, "kimi-k2.7-code");
   assertEquals(config.apiKey, "docs-key");
+});
+
+Deno.test("readAuditLlmConfig rejects invalid audit temperature", () => {
+  let rejected = false;
+  try {
+    readAuditLlmConfig({
+      DOCS_LLM_BASE_URL: "https://ollama.com/v1",
+      DOCS_LLM_MODEL: "glm-5.2",
+      DOCS_AUDIT_LLM_TEMPERATURE: "warm",
+    });
+  } catch {
+    rejected = true;
+  }
+
+  assert(rejected, "invalid audit temperature should be rejected");
 });
 
 Deno.test("normalizeGeneratedBody converts escaped newlines to real newlines", () => {
@@ -750,8 +810,9 @@ async function writeSampleGeneratedPages(
 Deno.test("verifyDocsHarness rejects stale generated command examples", async () => {
   const dir = await Deno.makeTempDir();
   try {
+    await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/bad.mdx`,
+      `${dir}/development/architecture-overview.mdx`,
       "Use `deno task dev` for setup. See tools/feles-build.ts.",
     );
 
@@ -1216,6 +1277,18 @@ Deno.test("verifyCodexAuditResult rejects malformed or blocking audits", () => {
         pass: true,
         blocking_findings: ["Missing source citation"],
         warnings: [],
+        recommendation: "Do not publish.",
+      },
+      {
+        pass: true,
+        blocking_findings: [1],
+        warnings: [],
+        recommendation: "Do not publish.",
+      },
+      {
+        pass: true,
+        blocking_findings: [],
+        warnings: [{}],
         recommendation: "Do not publish.",
       },
     ]

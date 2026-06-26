@@ -171,8 +171,9 @@ export function extractSettingsRoutes(
     )
   ) {
     const component = match[2];
+    const route = match[1].startsWith("/") ? match[1] : `/${match[1]}`;
     routes.push({
-      route: match[1],
+      route,
       component: imports.get(component) ?? component,
       source: source(pathFromRoot, appText, `path="${match[1]}"`),
     });
@@ -185,11 +186,21 @@ export function extractBridgeLoader(
   chromeRootText: string,
   pathFromRoot = "bridge/startup/src/chrome_root.ts",
 ): ArchitectureInventory["bridgeLoader"] {
+  const devLoaderUrl = chromeRootText.match(
+    /https?:\/\/[^"'`]+\/loader\/index\.ts/,
+  )?.[0] ?? "unknown";
+  const testLoaderUrl = chromeRootText.match(
+    /https?:\/\/[^"'`]+\/loader\/test\/index\.ts/,
+  )?.[0] ?? "unknown";
+  const productionLoader = chromeRootText.match(
+    /chrome:\/\/[^"'`]+\/core\.js/,
+  )?.[0] ?? "unknown";
+
   return {
-    devLoaderUrl: "http://localhost:5181/loader/index.ts",
-    testLoaderUrl: "http://localhost:5181/loader/test/index.ts",
-    productionLoader: "chrome://noraneko/content/core.js",
-    source: source(pathFromRoot, chromeRootText, "http://localhost:5181"),
+    devLoaderUrl,
+    testLoaderUrl,
+    productionLoader,
+    source: source(pathFromRoot, chromeRootText, devLoaderUrl),
   };
 }
 
@@ -662,8 +673,13 @@ async function collectChromeFeatureEntries(
         summary: summarizeFeatureIndex(entry.name, text),
         entrypoints: featureEntrypoints(text),
       });
-    } catch {
-      // Directories without an index.ts are not loader-discovered features.
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) {
+        // Directories without an index.ts are not loader-discovered features.
+        continue;
+      }
+      console.error("[DocsHarness]", `Failed to read ${sourcePath}`, error);
+      throw error;
     }
   }
 
