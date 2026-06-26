@@ -588,6 +588,13 @@ export function normalizeSourceMarkdownLinks(
   }).join("\n");
 }
 
+export function normalizeDuplicateSourceExtensions(text: string): string {
+  return text.replace(
+    /\b([\w./-]+\.(?:ts|tsx|mts|mjs|js|jsx))\.(?:ts|tsx|mts|mjs|js|jsx)\b/g,
+    "$1",
+  );
+}
+
 export async function generateDocsPayload(
   inventory: DocsInventory,
   config: LlmConfig,
@@ -951,9 +958,11 @@ export async function writeGeneratedDocs(
       );
     }
     await Deno.mkdir(path.dirname(outputPath), { recursive: true });
-    const body = normalizeSourceMarkdownLinks(
-      finalizePageBody(page, inventory),
-      inventory,
+    const body = normalizeDuplicateSourceExtensions(
+      normalizeSourceMarkdownLinks(
+        finalizePageBody(page, inventory),
+        inventory,
+      ),
     );
     await Deno.writeTextFile(
       outputPath,

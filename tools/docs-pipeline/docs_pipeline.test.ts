@@ -21,6 +21,7 @@ import {
   escapeMdxText,
   generateDocsPayload,
   LLM_AUTHORED_PAGE_PATHS,
+  normalizeDuplicateSourceExtensions,
   normalizeGeneratedBody,
   normalizeSourceMarkdownLinks,
   readLlmConfig,
@@ -351,6 +352,15 @@ Deno.test("normalizeSourceMarkdownLinks ignores links inside fenced code", () =>
   assertEquals(
     normalizeSourceMarkdownLinks(text, sampleInventory()),
     text,
+  );
+});
+
+Deno.test("normalizeDuplicateSourceExtensions fixes repeated TypeScript extensions", () => {
+  assertEquals(
+    normalizeDuplicateSourceExtensions(
+      "See `browser-features/chrome/static/overrides/index.ts.ts` and `browser-features/pages-settings/src/App.tsx.tsx`.",
+    ),
+    "See `browser-features/chrome/static/overrides/index.ts` and `browser-features/pages-settings/src/App.tsx`.",
   );
 });
 
