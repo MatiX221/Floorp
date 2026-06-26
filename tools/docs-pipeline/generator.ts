@@ -538,6 +538,18 @@ function replacementForUnsupportedSourcePath(
   ) {
     return "static/gecko/pref/override.ini";
   }
+  if (
+    sourcePath === "tools/src/colocated_test_collector.ts" &&
+    allowedSources.has("tools/src/browser_test_collector.ts")
+  ) {
+    return "tools/src/browser_test_collector.ts";
+  }
+  if (
+    sourcePath.startsWith(".github/workflows/mozconfigs") &&
+    allowedSources.has(".github/workflows/package.yml")
+  ) {
+    return ".github/workflows/package.yml";
+  }
   return undefined;
 }
 
