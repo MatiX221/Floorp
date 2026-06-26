@@ -1,0 +1,239 @@
+---
+title: "Architecture Overview"
+sidebar_label: "Architecture"
+floorp_commit: "69f56f067cbdc722e290f2dfebb9c3e3f3ef60e9"
+generated: true
+---
+## Architecture Overview
+
+Floorp is a Firefox-derived browser that layers custom UI, modules, and tooling on top of a patched Gecko engine. The codebase is organized into discrete layers that each own a distinct responsibility, from preference overrides at the engine boundary to React-based full-page settings UIs.
+
+### Layered Model
+
+The architecture can be understood as five stacked layers, each with a clear entrypoint and boundary:
+
+1. **Firefox Base** — Patched Gecko engine and preference overrides that establish the runtime baseline (`static/gecko/pref/override.ini`).
+2. **ESM Modules** — Firefox ES Module system modules and Window Actor registration that bridge Gecko internals to Floorp features (`browser-features/modules/modules/BrowserGlue.sys.mts`).
+3. **Bridge** — Startup bridge that selects between dev/test HTTP loaders and production `chrome://` code (`bridge/startup/src/chrome_root.ts`).
+4. **Chrome UI** — SolidJS-based browser chrome features discovered by glob from `browser-features/chrome/common/mod.ts`.
+5. **Pages** — React/Tailwind full-page browser UIs such as the settings application (`browser-features/pages-settings/vite.config.ts`).
+
+### Firefox Base and Preference Overrides
+
+The lowest Floorp-owned layer sits at the Gecko preference boundary. The override file in `static/gecko/pref/override.ini` provides patched preference defaults that are applied before Floorp-specific modules execute. During packaging, the CI pipeline applies a preference override script to `firefox.js` in the distribution directory, confirming that this layer is integrated into the build rather than only present in source.
+
+### ESM Modules and Window Actors
+
+Floorp registers its own JS Window Actors through the standard Firefox actor registration API. The module file `browser-features/modules/modules/BrowserGlue.sys.mts` calls `ActorManagerParent.addJSWindowActors` to register 22 actors, each responsible for a specific cross-process communication channel.
+
+The registered actors include:
+
+- `NRSettings` and `NRAboutPreferences` — settings and preferences communication (`browser-features/modules/modules/BrowserGlue.sys.mts`, lines 35 and 24)
+- `NRTabManager` and `NRWorkspaces` — tab and workspace management (lines 85 and 149)
+- `NRPanelSidebar` — panel sidebar IPC (line 69)
+- `NRProgressiveWebApp` and `NRPwaManager` — PWA support (lines 165 and 181)
+- `NRProfileManager` — profile management (line 208)
+- `NRStartPage` and `NRWelcomePage` — start and welcome pages (lines 230 and 245)
+- `NRSearchEngine` and `NRWebScraper` — search and scraping (lines 262 and 286)
+- `NROSAutomotor` — Floorp OS automation (line 304)
+- `NRI18n` — internationalization (line 321)
+- `NRChromeWebStore` and `NRPluginStore` — extension stores (lines 338 and 358)
+- `NRMouseGestureScroll` — mouse gesture scroll handling (line 381)
+- `NRChromeModal` — modal dialogs (line 197)
+- `NRRestartBrowser` — browser restart (line 133)
+- `NRSyncManager` and `NRAppConstants` — sync and app constants (lines 101 and 117)
+- `NRExperimemmt` — experimental features (line 53)
+
+These actors form the IPC backbone between parent and content processes for all Floorp-specific functionality.
+
+### Bridge and Loader
+
+The bridge layer is the startup entrypoint that decides how Floorp's feature code is loaded into the browser chrome.
+
+#### Loader Selection
+
+`bridge/startup/src/chrome_root.ts` (line 59) defines three loader paths:
+
+- **Dev loader**: `http://localhost:5181/loader/index.ts` — used during local development with hot reloading.
+- **Test loader**: `http://localhost:5181/loader/test/index.ts` — used by the colocated test runner for browser integration tests.
+- **Production loader**: `chrome://noraneko/content/core.js` — the bundled production entrypoint served from the browser's chrome protocol.
+
+The dev/test loader is served by a Vite dev server configured on port 5181 (`bridge/loader-features/vite.config.ts`, line 17).
+
+#### Loader Entrypoint
+
+The loader entrypoint at `bridge/loader-features/loader/index.ts` performs the following sequence:
+
+1. Imports `BrowserGlue` to ensure ESM module actors are registered.
+2. Initializes internationalization.
+3. Records loader state for diagnostics.
+4. Filters enabled modules based on preferences and feature flags.
+5. Runs module lifecycle hooks for each enabled module.
+
+#### Module Registry
+
+`bridge/loader-features/loader/modules.ts` builds two module maps — common and static — from chrome feature entry globs. These maps are consumed by the loader to determine which feature modules to instantiate.
+
+#### Module Hooks
+
+`bridge/loader-features/loader/modules-hooks.ts` provides `onModuleLoaded` promises and internal module load-state resolution. This allows features to depend on the readiness of other features without introducing hard coupling.
+
+### Chrome UI Features
+
+The Chrome UI layer contains SolidJS-based browser chrome features. These are divided into two categories: **common** features that are dynamically discovered and **static** features that are initialized at fixed lifecycle points.
+
+#### Common Feature Discovery
+
+`browser-features/chrome/common/mod.ts` (line 4) discovers common features using the glob pattern `./*/index.ts`. Each discovered feature exports a default class and an `init` function that the loader calls during the module lifecycle.
+
+The `browser-features/chrome/README.md` documents the conventions for common and static feature directories and their utility patterns.
+
+#### Common Features
+
+The following common features are discovered and loaded by the bridge loader:
+
+| Feature | Component | Wires |
+|---|---|---|
+| `addons` | `Addons` | Chrome Web Store install confirmation UI (`browser-features/chrome/common/addons/index.ts`) |
+| `browser-share-mode` | `BrowserShareMode` | `browser-share-mode` (`browser-features/chrome/common/browser-share-mode/index.ts`) |
+| `browser-tab-color` | `BrowserTabColor` | `tabcolor-manager` (`browser-features/chrome/common/browser-tab-color/index.ts`) |
+| `chrome-css` | `ChromeCSS` | `service` (`browser-features/chrome/common/chrome-css/index.ts`) |
+| `command-palette` | `CommandPalette` | `service`, `components/CommandPalette`, `style.css?inline` (`browser-features/chrome/common/command-palette/index.ts`) |
+| `context-menu` | `ContextMenu` | — (`browser-features/chrome/common/context-menu/index.ts`) |
+| `designs` | `Designs` | `browser-design-element` (`browser-features/chrome/common/designs/index.ts`) |
+| `external-browser` | `ExternalBrowser` | `tab-context-menu`, `link-context-menu` (`browser-features/chrome/common/external-browser/index.ts`) |
+| `flex-order` | `FlexOrder` | `flex-order` (`browser-features/chrome/common/flex-order/index.ts`) |
+| `hub-panel-menu` | `HubPanelMenuComponent` | `HubPanelMenu` (`browser-features/chrome/common/hub-panel-menu/index.ts`) |
+| `keyboard-shortcut` | `KeyboardShortcut` | `service`, `config` (`browser-features/chrome/common/keyboard-shortcut/index.ts`) |
+| `modal-parent` | `ModalParent` | `modalManager`, `modalElement`, `data/data` (`browser-features/chrome/common/modal-parent/index.ts`) |
+| `mouse-gesture` | `MouseGesture` | `service`, `config`, `components/GestureDisplay` (`browser-features/chrome/common/mouse-gesture/index.ts`) |
+| `panel-sidebar` | `PanelSidebar` | `components/panel-sidebar`, `components/sidebar`, `components/sidebar-contextMenu` (`browser-features/chrome/common/panel-sidebar/index.ts`) |
+| `private-container` | `PrivateContainer` | `browser-private-container`, `context-menu` (`browser-features/chrome/common/private-container/index.ts`) |
+| `profile-manager` | `ProfileManager` | `service` (`browser-features/chrome/common/profile-manager/index.ts`) |
+| `pwa` | `Pwa` | `SsbPageAction`, `SsbPanelView`, `config` (`browser-features/chrome/common/pwa/index.ts`) |
+| `qr-code-generator` | `QRCodeGenerator` | `qr-code-button`, `qr-code-panel`, `style.css?inline` (`browser-features/chrome/common/qr-code-generator/index.ts`) |
+| `reboot-panel-menu` | `RebootPanelMenuComponent` | `RebootPanelMenu` (`browser-features/chrome/common/reboot-panel-menu/index.ts`) |
+| `reverse-sidebar-position` | — | `init` only (`browser-features/chrome/common/reverse-sidebar-position/index.ts`) |
+| `split-view` | `SplitView` | `split-view-manager` (`browser-features/chrome/common/split-view/index.ts`) |
+| `statusbar` | `StatusBar` | `context-menu`, `statusbar`, `statusbar-manager` (`browser-features/chrome/common/statusbar/index.ts`) |
+| `tab` | `Tab` | `scroll`, `openPosition`, `sizeSpecification` (`browser-features/chrome/common/tab/index.ts`) |
+| `tab-sleep-exclusion` | `TabSleepExclusion` | — (`browser-features/chrome/common/tab-sleep-exclusion/index.ts`) |
+| `tabbar` | `TabBar` | `multirow-tabbar/multirow-tabbar`, `tabbbar-style/tabbar-style` (`browser-features/chrome/common/tabbar/index.ts`) |
+| `ui-custom` | `UICustomization` | `styles/style-manager`, `layout/dom-manipulator` (`browser-features/chrome/common/ui-custom/index.ts`) |
+| `undo-closed-tab` | `UndoClosedTab` | `styleElem` (`browser-features/chrome/common/undo-closed-tab/index.ts`) |
+| `workspaces` | `Workspaces` | `workspacesTabManager`, `utils/workspace-icons`, `workspacesService` (`browser-features/chrome/common/workspaces/index.ts`) |
+| `zen-mode` | `ZenMode` | `zen-mode`, `styleElem` (`browser-features/chrome/common/zen-mode/index.ts`) |
+
+The `ui-custom` feature is notable because it exposes an additional `initBeforeSessionStoreInit` entrypoint, allowing it to perform DOM manipulation before the session store restores window state.
+
+#### Static Features
+
+Static features are initialized at fixed lifecycle points rather than through dynamic glob discovery. `browser-features/chrome/static/mod.ts` provides static feature entry discovery.
+
+| Feature | Entry points | Source |
+|---|---|---|
+| `downloadbar` | `init` | `browser-features/chrome/static/downloadbar/index.ts` |
+| `overrides` | `init` | `browser-features/chrome/static/overrides/index.ts` |
+| `prefs` | `init`, `initBeforeSessionStoreInit` | `browser-features/chrome/static/prefs/index.ts` |
+
+The `prefs` static feature, like `ui-custom`, runs an `initBeforeSessionStoreInit` hook to establish preference state before session restoration.
+
+### Pages Layer
+
+The Pages layer contains full-page browser UIs built with React and Tailwind, bundled with Vite. The settings application is the primary example.
+
+#### Settings Application Bootstrap
+
+`browser-features/pages-settings/src/main.tsx` bootstraps the React settings application with theme support, internationalization, and hash-based routing. The Vite configuration at `browser-features/pages-settings/vite.config.ts` defines the build pipeline for this page.
+
+#### Settings Routes
+
+`browser-features/pages-settings/src/App.tsx` defines the route table for the settings application:
+
+| Route | Component | Source line |
+|---|---|---|
+| `/` | `Navigate` (redirect) | line 39 |
+| `/search` | `@/app/search/page.tsx` | line 42 |
+| `/overview/home` | `@/app/dashboard/page.tsx` | line 43 |
+| `/features/design` | `@/app/design/page.tsx` | line 44 |
+| `/features/design/lepton` | `@/app/design/components/LeptonSettings.tsx` | line 46 |
+| `/features/sidebar` | `@/app/sidebar/page.tsx` | line 49 |
+| `/features/workspaces` | `@/app/workspaces/page.tsx` | line 50 |
+| `/features/webapps` | `@/app/pwa/page.tsx` | line 51 |
+| `/features/floorp-os` | `@/app/floorp-os/page.tsx` | line 52 |
+| `/features/accounts` | `@/app/accounts/page.tsx` | line 54 |
+| `features/gesture` | `@/app/gesture/page.tsx` | line 57 |
+| `/features/shortcuts` | `@/app/keyboard-shortcut/page.tsx` | line 59 |
+| `/about/browser` | `./app/about/noraneko.tsx` | line 62 |
+| `/about/updates` | `@/app/updates/page.tsx` | line 63 |
+
+### Tooling and Build System
+
+Floorp's developer tooling is built on Deno and organized into several CLI tools.
+
+#### Feles Build CLI
+
+`tools/feles-build.ts` defines the build, dev, stage, test, and misc patch commands:
+
+- `feles-build dev` — starts the development environment (line 246)
+- `feles-build test` — runs browser tests (line 255)
+- `feles-build stage [--marionette]` — stages a build for testing, optionally with Marionette enabled (line 266)
+- `feles-build build --phase &lt;before-mach|after-mach&gt;` — runs build phases relative to the `mach` build system (line 274)
+- `feles-build misc patch --action &lt;apply|create|init&gt;` — manages patches (line 286)
+
+#### Dev Tool CLI
+
+`tools/dev-tool.ts` provides a development inspection CLI with start/stop/rebuild commands plus Marionette-backed status, eval, console, screenshot, navigation, and DOM inspection capabilities.
+
+#### Colocated Test Runner
+
+`tools/src/colocated_test_runner.ts` discovers browser tests, filters them by layer and near-path, autostarts `feles-build test` when needed, and collects browser-side results. The companion `tools/src/browser_test_collector.ts` polls the Firefox profile's `prefs.js` for structured test results written by the browser-side runner.
+
+#### Deno Task Entry Points
+
+`deno.json` defines the root task entrypoints, workspace packages, imports, and docs harness commands. Key tasks include:
+
+- `deno task feles-build` — invokes the feles-build CLI
+- `deno task dev-tool` — invokes the dev-tool CLI
+- `deno task test` — runs the colocated test runner
+- `deno task test:smoke` — runs the smoke test runner
+- `deno task test:host` — runs host-side Deno tests in `tools/src/`
+- `deno task test:integration` — chains colocated tests with OS API quick tests
+
+### CI Pipeline
+
+The CI pipeline is organized into reusable workflows and publishing workflows.
+
+#### Build and Test Workflows
+
+- **Build Installers** (`.github/workflows/build_installers.yml`) — triggered by `workflow_call` and `workflow_dispatch`; builds platform-specific stub installers including a Tauri-based Windows stub installer.
+- **Browser Integration + Runner Tests** (`.github/workflows/colocated_runner_test.yml`) — triggered by `pull_request`, `push`, and `workflow_dispatch`; runs Xvfb-backed browser integration tests, smoke tests, and colocated runner tests. It autostarts `feles-build test` and waits for Marionette readiness.
+- **Docs LLM Harness** (`.github/workflows/docs_harness.yml`) — triggered by `pull_request`, `push`, `schedule`, and `workflow_dispatch`; collects source inventory, generates documentation, and verifies it against the inventory.
+
+#### Packaging and Publishing Workflows
+
+- **Package** (`.github/workflows/package.yml`) — reusable workflow that performs artifact builds, branding application, preference overrides, platform-specific packaging (Windows installer, Linux tarball/DEB, macOS DMG), MAR generation, and code signing.
+- **Package and Publish Alpha** (`.github/workflows/package_and_publish_alpha.yml`) — orchestrates alpha packaging and publishing with `contents:write` permission.
+- **Package and Publish Release** (`.github/workflows/package_and_publish_release.yml`) — orchestrates stable release packaging and publishing; checks for existing versions before proceeding.
+- **Publish Alpha** (`.github/workflows/publish_alpha.yml`) — generates update XML files and publishes alpha artifacts.
+- **Publish Release** (`.github/workflows/publish_release.yml`) — aggregates platform metadata, generates file hashes, triggers portable build and update XML workflows, and publishes the GitHub release.
+- **Publish Linux DEB to PPA** (`.github/workflows/publish_ppa.yml`) — publishes DEB packages to a PPA via FTP with GPG signing and CDN propagation verification.
+
+#### Maintenance Workflows
+
+- **Update Lepton** (`.github/workflows/update_lepton.yml`) — scheduled workflow that downloads the latest Lepton theme releases and commits updated CSS, icons, and user.js files into `browser-features/skin/lepton/`.
+- **Moderate Content** (`.github/workflows/moderation.yml`) — triggered by issue comments, issues, and pull requests; flags content for moderation.
+- **Close inactive issues and PRs** (`.github/workflows/organize_issue.yml`) — scheduled workflow that closes inactive issues and pull requests.
+
+### Data Flow Summary
+
+At startup, the following sequence occurs:
+
+1. Gecko loads with Floorp preference overrides from `static/gecko/pref/override.ini`.
+2. `BrowserGlue.sys.mts` registers 22 JS Window Actors via `ActorManagerParent.addJSWindowActors`.
+3. The bridge in `bridge/startup/src/chrome_root.ts` selects the appropriate loader based on environment (dev HTTP, test HTTP, or production `chrome://`).
+4. The loader at `bridge/loader-features/loader/index.ts` imports BrowserGlue, initializes i18n, filters enabled modules, and runs lifecycle hooks.
+5. The module registry at `bridge/loader-features/loader/modules.ts` provides common and static module maps built from feature entry globs.
+6. Common chrome features are discovered via `./*/index.ts` in `browser-features/chrome/common/mod.ts` and initialized through their `init` entrypoints.
+7. Static chrome features are initialized at fixed lifecycle points, with `prefs` and `ui-custom` running pre-session-store hooks.
+8. Full-page UIs such as settings are loaded on demand through the Pages layer, with React routing defined in `browser-features/pages-settings/src/App.tsx`.
