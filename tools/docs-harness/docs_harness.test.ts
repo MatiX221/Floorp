@@ -550,26 +550,6 @@ function sampleGeneratedPages(): GeneratedPage[] {
   }));
 }
 
-function sampleGeneratedPagesFor(
-  pagePaths: readonly string[],
-): GeneratedPage[] {
-  return pagePaths.map((pagePath) => ({
-    path: pagePath,
-    title: pagePath.split("/").at(-1)!.replace(".mdx", ""),
-    sidebar_label: pagePath.split("/").at(-1)!.replace(".mdx", ""),
-    body:
-      "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
-  }));
-}
-
-function requiredPagesFromRequest(
-  messages: Array<{ role: string; content: string }>,
-): string[] {
-  const userMessage =
-    messages.find((message) => message.role === "user")?.content ?? "";
-  return JSON.parse(userMessage).required_pages as string[];
-}
-
 async function writeSampleGeneratedPages(
   dir: string,
   inventory: DocsInventory = sampleInventory(),

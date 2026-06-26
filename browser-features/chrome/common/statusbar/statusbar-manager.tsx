@@ -69,7 +69,7 @@ export class StatusBarManager {
     }
 
     // Set up button press handler
-    statusbarNode.addEventListener("mousedown", (event) => {
+    statusbarNode.addEventListener("mousedown", (event: MouseEvent) => {
       if (!event.target) {
         // Event target is null
         return;
