@@ -20,7 +20,8 @@ const STALE_COMMANDS = [
   /\bdeno\s+task\s+clean(?![-:\w])/g,
 ];
 
-const DENO_TASK_PATTERN = /\bdeno\s+task\s+([A-Za-z0-9:_-]+)/g;
+const DENO_TASK_PATTERN =
+  /\bdeno\s+task\s+([A-Za-z0-9_-](?:[A-Za-z0-9:_-]*[A-Za-z0-9_-])?)/g;
 const SECRET_IDENTIFIER_PATTERN =
   /\b[A-Z0-9_]*(TOKEN|PASS|PASSWORD|SECRET|API_KEY)[A-Z0-9_]*\b/g;
 const ALLOWED_PUBLIC_ENV_NAMES = new Set([

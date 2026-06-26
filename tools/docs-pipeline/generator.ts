@@ -491,6 +491,52 @@ export function escapeMdxText(text: string): string {
   }).join("\n");
 }
 
+function normalizeMarkdownLinkTarget(target: string): string {
+  return target
+    .trim()
+    .split("#")[0]
+    .replace(/:\d+$/, "");
+}
+
+function sourceLinkReplacement(label: string, target: string): string {
+  const normalizedLabel = label.trim();
+  const normalizedTarget = normalizeMarkdownLinkTarget(target);
+  if (
+    normalizedLabel === normalizedTarget ||
+    normalizedLabel === path.basename(normalizedTarget)
+  ) {
+    return `\`${normalizedTarget}\``;
+  }
+  return `${normalizedLabel} (\`${normalizedTarget}\`)`;
+}
+
+export function normalizeSourceMarkdownLinks(
+  text: string,
+  inventory: DocsInventory,
+): string {
+  const allowedSources = new Set(allowedCitationPaths(inventory));
+  let inFence = false;
+  return text.split(/\r?\n/).map((line) => {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      return line;
+    }
+    if (inFence) {
+      return line;
+    }
+    return line.replace(
+      /\[([^\]\n]+)\]\(([^)\s]+)\)/g,
+      (fullMatch, label: string, target: string) => {
+        const normalizedTarget = normalizeMarkdownLinkTarget(target);
+        if (!allowedSources.has(normalizedTarget)) {
+          return fullMatch;
+        }
+        return sourceLinkReplacement(label, target);
+      },
+    );
+  }).join("\n");
+}
+
 export async function generateDocsPayload(
   inventory: DocsInventory,
   config: LlmConfig,
@@ -854,11 +900,13 @@ export async function writeGeneratedDocs(
       );
     }
     await Deno.mkdir(path.dirname(outputPath), { recursive: true });
+    const body = normalizeSourceMarkdownLinks(
+      finalizePageBody(page, inventory),
+      inventory,
+    );
     await Deno.writeTextFile(
       outputPath,
-      `${frontmatter(page, inventory)}${
-        finalizePageBody(page, inventory).trim()
-      }\n`,
+      `${frontmatter(page, inventory)}${body.trim()}\n`,
     );
     written.push(outputPath);
   }

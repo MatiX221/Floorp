@@ -22,6 +22,7 @@ import {
   generateDocsPayload,
   LLM_AUTHORED_PAGE_PATHS,
   normalizeGeneratedBody,
+  normalizeSourceMarkdownLinks,
   readLlmConfig,
   writeGeneratedDocs,
 } from "./generator.ts";
@@ -323,6 +324,34 @@ Deno.test("escapeMdxText escapes placeholders outside fenced code", () => {
   );
 });
 
+Deno.test("normalizeSourceMarkdownLinks converts source links to code citations", () => {
+  const text = [
+    "Use [deno.json](deno.json) and [feles-build](tools/feles-build.ts).",
+    "Keep [external](https://example.com) links unchanged.",
+  ].join("\n");
+
+  assertEquals(
+    normalizeSourceMarkdownLinks(text, sampleInventory()),
+    [
+      "Use `deno.json` and feles-build (`tools/feles-build.ts`).",
+      "Keep [external](https://example.com) links unchanged.",
+    ].join("\n"),
+  );
+});
+
+Deno.test("normalizeSourceMarkdownLinks ignores links inside fenced code", () => {
+  const text = [
+    "```md",
+    "[deno.json](deno.json)",
+    "```",
+  ].join("\n");
+
+  assertEquals(
+    normalizeSourceMarkdownLinks(text, sampleInventory()),
+    text,
+  );
+});
+
 Deno.test("generateDocsPayload uses OpenAI-compatible chat completions", async () => {
   let sawAuthorizationHeader = false;
   let requestCount = 0;
@@ -549,6 +578,12 @@ function sampleInventory(): DocsInventory {
         {
           name: "dev-tool",
           command: "deno run -A tools/dev-tool.ts",
+          source: { path: "deno.json" },
+        },
+        {
+          name: "docs-pipeline",
+          command:
+            "deno run --allow-read --allow-write --allow-env --allow-net --allow-run tools/docs-pipeline/mod.ts",
           source: { path: "deno.json" },
         },
         {
@@ -856,6 +891,25 @@ Deno.test("verifyDocsPipeline rejects unknown deno task commands", async () => {
       issues.some((issue) => issue.message.includes("unknown deno task")),
       "expected unknown deno task issue",
     );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("verifyDocsPipeline ignores trailing colon after known deno task names", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await writeSampleGeneratedPages(dir);
+    await Deno.writeTextFile(
+      `${dir}/development/architecture-overview.mdx`,
+      [
+        "`deno task docs-pipeline:` is the root docs pipeline command label.",
+        "The task is defined in `deno.json`.",
+      ].join("\n"),
+    );
+
+    const issues = await verifyDocsPipeline(sampleInventory(), dir);
+    assertEquals(issues, []);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
