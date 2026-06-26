@@ -153,6 +153,7 @@ function buildAuditMessages(
         "The allowed JSON keys are pass, blocking_findings, warnings, and recommendation.",
         "Treat source-backed usefulness as blocking when a page makes uncited architecture claims, invents commands, invents APIs, or is too vague to help a Floorp contributor.",
         "Public configuration key names such as DOCS_LLM_BASE_URL, DOCS_LLM_MODEL, DOCS_LLM_API_KEY, DOCS_AUDIT_LLM_MODEL, and DOCS_AUDIT_LLM_API_KEY may be mentioned as names only.",
+        "Project docs requirements intentionally frame Floorp OS API as an integration layer for local applications, MCP servers, and other automation clients. Treat MCP as allowed client framing only when the docs do not invent MCP packaging, authentication storage, startup policy, token files, body limits, timeouts, or error mappings.",
       ].join("\n"),
     },
     {

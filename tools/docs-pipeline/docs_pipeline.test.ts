@@ -398,7 +398,7 @@ Deno.test("generateDocsPayload uses OpenAI-compatible chat completions", async (
     assertEquals(payload.pages.length, REQUIRED_GENERATED_PAGE_PATHS.length);
     assertEquals(
       payload.pages[0].path,
-      "development/architecture-overview.mdx",
+      "development/directories/bridge.mdx",
     );
     assert(
       payload.pages[0].body.includes(
@@ -496,6 +496,11 @@ Deno.test("runLlmAudit uses OpenAI-compatible chat completions", async () => {
 
       assertEquals(body.model, "audit-model");
       assert(Array.isArray(body.messages), "messages must be an array");
+      assert(
+        JSON.stringify(body.messages).includes(
+          "MCP servers, and other automation clients",
+        ),
+      );
       assertEquals(body.response_format, { type: "json_object" });
 
       return Response.json({
@@ -595,6 +600,12 @@ function sampleInventory(): DocsInventory {
           source: { path: "deno.json" },
         },
         {
+          name: "docs-pipeline:generate",
+          command:
+            "deno run --allow-read --allow-write=_dist,docs --allow-env=DOCS_LLM_BASE_URL,DOCS_LLM_MODEL,DOCS_LLM_API_KEY,DOCS_LLM_TEMPERATURE,DOCS_LLM_RESPONSE_FORMAT --allow-net tools/docs-pipeline/mod.ts generate",
+          source: { path: "deno.json" },
+        },
+        {
           name: "docs-pipeline:verify",
           command:
             "deno run --allow-read --allow-write=_dist tools/docs-pipeline/mod.ts verify",
@@ -679,6 +690,14 @@ function sampleInventory(): DocsInventory {
           },
           summary: "Initializes the Workspaces chrome feature.",
           entrypoints: ["default class Workspaces", "init"],
+        },
+        {
+          name: "statusbar",
+          source: {
+            path: "browser-features/chrome/common/statusbar/index.ts",
+          },
+          summary: "Initializes the Status Bar chrome feature.",
+          entrypoints: ["default class StatusBar", "init"],
         },
       ],
       chromeStatic: [
@@ -864,7 +883,7 @@ Deno.test("verifyDocsPipeline rejects stale generated command examples", async (
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       "Use `deno task dev` for setup. See tools/feles-build.ts.",
     );
 
@@ -883,7 +902,7 @@ Deno.test("verifyDocsPipeline does not treat dev-tool as stale dev task", async 
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       "Use `deno task dev-tool`. See deno.json.",
     );
 
@@ -899,7 +918,7 @@ Deno.test("verifyDocsPipeline rejects unknown deno task commands", async () => {
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       "Run `deno task test:integration`. See deno.json.",
     );
 
@@ -918,7 +937,7 @@ Deno.test("verifyDocsPipeline ignores trailing colon after known deno task names
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       [
         "`deno task docs-pipeline:` is the root docs pipeline command label.",
         "The task is defined in `deno.json`.",
@@ -937,7 +956,7 @@ Deno.test("verifyDocsPipeline allows explicitly framed drift strings", async () 
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       [
         "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
         "### Outdated Docs Drift Patterns",
@@ -958,9 +977,9 @@ Deno.test("verifyDocsPipeline allows explicitly framed drift strings", async () 
 Deno.test("verifyDocsPipeline rejects missing required generated pages", async () => {
   const dir = await Deno.makeTempDir();
   try {
-    await Deno.mkdir(`${dir}/development`, { recursive: true });
+    await Deno.mkdir(`${dir}/development/directories`, { recursive: true });
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
     );
 
@@ -979,7 +998,7 @@ Deno.test("verifyDocsPipeline rejects raw MDX angle brackets outside fences", as
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       "Use `feles-build build --phase <before-mach|after-mach>`. See tools/feles-build.ts.",
     );
 
@@ -998,7 +1017,7 @@ Deno.test("verifyDocsPipeline rejects MDX executable syntax", async () => {
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       [
         "import Dangerous from './Dangerous'",
         "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
@@ -1025,7 +1044,7 @@ Deno.test("verifyDocsPipeline allows public LLM env key names but rejects publis
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       [
         "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
         "Optional auth uses `DOCS_LLM_API_KEY`.",
@@ -1050,7 +1069,7 @@ Deno.test("verifyDocsPipeline rejects literal escaped newlines", async () => {
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       "# Architecture\\n\\nChrome features are discovered from `browser-features/chrome/common/mod.ts`.",
     );
 
@@ -1069,7 +1088,7 @@ Deno.test("verifyDocsPipeline rejects nonexistent referenced source paths", asyn
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       [
         "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
         "The inventory lives at `tools/docs-pipeline/inventory.json`.",
@@ -1143,6 +1162,11 @@ Deno.test("writeGeneratedDocs stabilizes CI reference from inventory", async () 
     assert(
       text.includes(
         "deno task feles-build test > _dist/ci-feles-build-test.log 2>&1 &",
+      ),
+    );
+    assert(
+      text.includes(
+        "deno task docs-pipeline:generate --inventory _dist/docs-pipeline/inventory.json --out docs",
       ),
     );
     assert(!text.includes("den o task"));
@@ -1240,6 +1264,22 @@ Deno.test("writeGeneratedDocs generates nested feature and actor catalogs from i
       ),
     );
 
+    const commonDirectoryPage = await Deno.readTextFile(
+      `${dir}/development/directories/browser-features/chrome/common.mdx`,
+    );
+    assert(commonDirectoryPage.includes("Common Chrome Features"));
+    assert(
+      commonDirectoryPage.includes(
+        `${sampleInventory().features.chromeCommon.length} common feature entries`,
+      ),
+    );
+    assertEquals(
+      commonDirectoryPage.match(
+        /browser-features\/chrome\/common\/statusbar\/index\.ts/g,
+      )?.length,
+      1,
+    );
+
     const actorCatalog = await Deno.readTextFile(
       `${dir}/development/features/browser-features/modules/settings-and-internal-pages-actors.mdx`,
     );
@@ -1247,6 +1287,48 @@ Deno.test("writeGeneratedDocs generates nested feature and actor catalogs from i
     assert(
       actorCatalog.includes(
         "browser-features/modules/modules/BrowserGlue.sys.mts",
+      ),
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("writeGeneratedDocs stabilizes architecture overview counts from inventory", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await writeGeneratedDocs(
+      dir,
+      {
+        pages: sampleGeneratedPages().map((page) =>
+          page.path === "development/architecture-overview.mdx"
+            ? {
+              ...page,
+              body:
+                "Bad model output says the inventory lists 28 common features.",
+            }
+            : page
+        ),
+      },
+      sampleInventory(),
+    );
+
+    const text = await Deno.readTextFile(
+      `${dir}/development/architecture-overview.mdx`,
+    );
+    assert(
+      text.includes(
+        `${sampleInventory().features.chromeCommon.length} common features`,
+      ),
+    );
+    assert(!text.includes("28 common features"));
+    assert(text.includes("http://localhost:5181/loader/index.ts"));
+    assert(text.includes("chrome://noraneko/content/core.js"));
+    assert(!text.includes("undefined"));
+    assert(text.includes("MCP servers, and other automation clients"));
+    assert(
+      text.includes(
+        "browser-features/modules/modules/os-server/server.sys.mts",
       ),
     );
   } finally {
@@ -1267,6 +1349,7 @@ Deno.test("writeGeneratedDocs generates Floorp OS API layer docs from inventory"
       `${dir}/development/directories/floorp-os-api.mdx`,
     );
     assert(text.includes("MCP servers"));
+    assert(text.includes("MCP-server usage is a docs requirement"));
     assert(text.includes("/tabs/instances"));
     assert(text.includes("/tabs/instances/:id/element"));
     assert(text.includes("/scraper/instances/:id/text"));
@@ -1458,10 +1541,10 @@ Deno.test("verifyDocsPipeline accepts source-backed generated MDX", async () => 
   try {
     await writeSampleGeneratedPages(dir);
     await Deno.writeTextFile(
-      `${dir}/development/architecture-overview.mdx`,
+      `${dir}/development/directories/bridge.mdx`,
       [
         "Chrome features are discovered from `browser-features/chrome/common/mod.ts`.",
-        "See [Command Reference](./reference/command-reference).",
+        "See [Command Reference](../reference/command-reference).",
       ].join("\n"),
     );
 

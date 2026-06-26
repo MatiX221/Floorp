@@ -968,6 +968,14 @@ function finalizePageBody(
   page: GeneratedPage,
   inventory: DocsInventory,
 ): string {
+  if (page.path === "development/architecture-overview.mdx") {
+    return buildArchitectureOverview(inventory);
+  }
+  if (
+    page.path === "development/directories/browser-features/chrome/common.mdx"
+  ) {
+    return buildCommonChromeDirectoryPage(inventory);
+  }
   if (page.path === "development/features/browser-features/overview.mdx") {
     return buildBrowserFeaturesCatalogOverview(inventory);
   }
@@ -1031,6 +1039,110 @@ function finalizePageBody(
     return buildCiTestReference(inventory);
   }
   return page.body;
+}
+
+function buildArchitectureOverview(inventory: DocsInventory): string {
+  const commonFeatureNames = inventory.features.chromeCommon.map((feature) =>
+    feature.name
+  );
+  const staticFeatureNames = inventory.features.chromeStatic.map((feature) =>
+    feature.name
+  );
+  const routeCount = inventory.floorpOsApi.routeModules.reduce(
+    (sum, module) => sum + module.routes.length,
+    0,
+  );
+  const routeNamespaceRows = inventory.floorpOsApi.routeModules.map((module) =>
+    `| ${
+      escapeTableCell(module.namespace)
+    } | ${module.routes.length} | \`${module.source.path}\` |`
+  );
+
+  return [
+    "# Architecture Overview",
+    "",
+    "Floorp layers Firefox/Gecko configuration, privileged Firefox ESM modules, the startup bridge, browser chrome features, full-page settings UI, and the Floorp OS API into one browser application. This overview is generated from the docs inventory so counts and source paths stay aligned with the repository.",
+    "",
+    "## Layer Map",
+    "",
+    "| Layer | Source | Role |",
+    "|---|---|---|",
+    ...inventory.architecture.layers.map((layer) =>
+      `| ${escapeTableCell(layer.name)} | \`${
+        formatSource(layer.source.path, layer.source.line)
+      }\` | ${escapeTableCell(layer.summary)} |`
+    ),
+    "",
+    "## Startup And Loader Flow",
+    "",
+    `The startup bridge is owned by \`${
+      formatSource(
+        inventory.architecture.bridgeLoader.source.path,
+        inventory.architecture.bridgeLoader.source.line,
+      )
+    }\`. It selects these loader entry points from the inventory:`,
+    "",
+    `- Development: \`${inventory.architecture.bridgeLoader.devLoaderUrl}\``,
+    `- Test: \`${inventory.architecture.bridgeLoader.testLoaderUrl}\``,
+    `- Production: \`${inventory.architecture.bridgeLoader.productionLoader}\``,
+    "",
+    `The loader development server is configured by \`${
+      formatSource(
+        inventory.architecture.loaderDevServer.source.path,
+        inventory.architecture.loaderDevServer.source.line,
+      )
+    }\` on port ${inventory.architecture.loaderDevServer.port}.`,
+    "",
+    "## Privileged Modules And Window Actors",
+    "",
+    `Window Actors are registered from \`${
+      formatSource(
+        inventory.architecture.windowActors.source.path,
+        inventory.architecture.windowActors.source.line,
+      )
+    }\`. The current inventory lists ${inventory.features.windowActors.length} actors:`,
+    "",
+    ...inventory.features.windowActors.map((actor) => `- \`${actor.name}\``),
+    "",
+    "## Chrome UI Features",
+    "",
+    `Common chrome features are discovered from \`${
+      formatSource(
+        inventory.architecture.chromeFeatureDiscovery.source.path,
+        inventory.architecture.chromeFeatureDiscovery.source.line,
+      )
+    }\` with the glob pattern \`${inventory.architecture.chromeFeatureDiscovery.globPattern}\`. The current inventory lists ${commonFeatureNames.length} common features:`,
+    "",
+    ...commonFeatureNames.map((name) => `- \`${name}\``),
+    "",
+    `Static chrome features are discovered from \`browser-features/chrome/static/mod.ts\`. The current inventory lists ${staticFeatureNames.length} static features:`,
+    "",
+    ...staticFeatureNames.map((name) => `- \`${name}\``),
+    "",
+    "## Settings Pages",
+    "",
+    `The settings app is represented by \`browser-features/pages-settings/src/App.tsx\` and currently exposes ${inventory.features.settingsRoutes.length} collected routes. Use the generated settings catalog for route-to-component ownership.`,
+    "",
+    "## Floorp OS API",
+    "",
+    `The Floorp OS API route inventory is rooted at \`${inventory.floorpOsApi.server.path}\` and \`${inventory.floorpOsApi.router.path}\`. The current inventory lists ${routeCount} concrete route rows across ${inventory.floorpOsApi.routeModules.length} route namespaces.`,
+    "",
+    "| Namespace | Routes | Source |",
+    "|---|---:|---|",
+    ...routeNamespaceRows,
+    "",
+    "The docs pipeline treats Floorp OS API as a special integration layer for local applications, MCP servers, and other automation clients. Source-backed route behavior remains owned by the server, router, shared routes, OS Automotor manager, and settings page sources listed in the Floorp OS API page.",
+    "",
+    "## Commands And CI",
+    "",
+    `Deno task inventory comes from \`deno.json\` and currently lists ${inventory.commands.denoTasks.length} tasks. The feles-build command inventory comes from \`tools/feles-build.ts\` and currently lists ${inventory.commands.felesBuild.length} commands.`,
+    "",
+    "CI workflows recorded in the docs inventory:",
+    "",
+    ...inventory.ci.workflows.map((workflow) =>
+      `- \`${workflow.path}\` - triggers: ${formatList(workflow.triggers)}`
+    ),
+  ].join("\n");
 }
 
 function buildBrowserFeaturesCatalogOverview(
@@ -1164,6 +1276,71 @@ function buildCommonFeatureCategoryPage(
     "## Feature Entries",
     "",
     ...featureTableRows(features),
+  ].join("\n");
+}
+
+function buildCommonChromeDirectoryPage(inventory: DocsInventory): string {
+  const assigned = new Set<string>();
+  const categorySections = COMMON_FEATURE_CATEGORIES.flatMap((category) => {
+    const features = selectFeaturesByNames(
+      inventory.features.chromeCommon,
+      category.names,
+    );
+    for (const feature of features) {
+      assigned.add(feature.name);
+    }
+    return [
+      `### ${category.title}`,
+      "",
+      category.summary,
+      "",
+      ...featureTableRows(features),
+      "",
+    ];
+  });
+  const uncategorized = inventory.features.chromeCommon.filter((feature) =>
+    !assigned.has(feature.name)
+  );
+
+  return [
+    "# Common Chrome Features",
+    "",
+    "The `browser-features/chrome/common/` directory contains loader-managed browser chrome features. This page is generated from the common feature inventory and the shared category map, so each discovered feature appears in exactly one category table.",
+    "",
+    "## Discovery And Loading",
+    "",
+    `Common features are discovered by \`${
+      formatSource(
+        inventory.architecture.chromeFeatureDiscovery.source.path,
+        inventory.architecture.chromeFeatureDiscovery.source.line,
+      )
+    }\` using the glob pattern \`${inventory.architecture.chromeFeatureDiscovery.globPattern}\`. The current inventory contains ${inventory.features.chromeCommon.length} common feature entries.`,
+    "",
+    "The bridge loader turns discovered entries into loadable modules, while each feature entrypoint remains responsible for its own component, services, styles, context menus, or lifecycle hooks.",
+    "",
+    "## Lifecycle Conventions",
+    "",
+    "Most entries expose an `init` lifecycle. Entries that include `initBeforeSessionStoreInit` are listed with that entrypoint in the generated tables below. The exact source path for each feature is the authority for its component and wired submodules.",
+    "",
+    "## Feature Categories",
+    "",
+    ...categorySections,
+    "### Uncategorized",
+    "",
+    ...(uncategorized.length > 0 ? featureTableRows(uncategorized) : [
+      "All discovered common chrome features are currently assigned to a generated category.",
+    ]),
+    "",
+    "## Relationship To Other Layers",
+    "",
+    `- Window Actor integration is registered in \`${
+      formatSource(
+        inventory.architecture.windowActors.source.path,
+        inventory.architecture.windowActors.source.line,
+      )
+    }\`.`,
+    "- Settings pages may expose user-facing controls for selected common features; use the settings route catalog for route ownership.",
+    "- Static chrome features live in the separate static catalog and are not duplicated in this common-feature directory page.",
   ].join("\n");
 }
 
@@ -1311,7 +1488,7 @@ function buildFloorpOsApiPage(inventory: DocsInventory): string {
   return [
     "# Floorp OS API Layer",
     "",
-    "Floorp OS API is a special integration layer for local applications, MCP servers, and other automation clients that need controlled access to Floorp browser state. It is not a normal settings page or chrome UI feature. It exposes a loopback-only HTTP/JSON boundary from privileged Firefox modules and then routes requests into browser, tab, scraper, workspace, and automation services.",
+    "Floorp OS API is documented as a special integration layer for local applications, MCP servers, and other automation clients that need controlled access to Floorp browser state. It is not a normal settings page or chrome UI feature. The source inventory backs the local HTTP/JSON boundary, route namespaces, browser automation behavior, OS Automotor manager, and settings surface.",
     "",
     "## Ownership And Source Boundaries",
     "",
@@ -1350,7 +1527,7 @@ function buildFloorpOsApiPage(inventory: DocsInventory): string {
     "",
     "## Integration Boundary",
     "",
-    "From the inventory, Floorp OS API should be treated as a privileged local integration boundary rather than a web page feature. Local applications and MCP servers interact with this boundary through the route namespaces listed below. Browser state and active automation are exposed through route modules, while the settings page and OS Automotor manager are separate integration points for user-facing enablement and process management.",
+    "From the source inventory, Floorp OS API should be treated as a privileged local integration boundary rather than a web page feature. The route namespaces below describe the browser-facing surface that local clients can use. MCP-server usage is a docs requirement for this layer, but the current inventory does not define MCP packaging, authentication storage, or startup policy.",
     "",
     "Source-backed implementation boundaries:",
     "",
@@ -1646,6 +1823,7 @@ function buildCiTestReference(inventory: DocsInventory): string {
     "",
     "```bash",
     "deno task docs-pipeline:collect --out _dist/docs-pipeline/inventory.json",
+    "deno task docs-pipeline:generate --inventory _dist/docs-pipeline/inventory.json --out docs",
     "deno task docs-pipeline:verify --inventory _dist/docs-pipeline/inventory.json",
     "deno task docs-pipeline:audit --inventory _dist/docs-pipeline/inventory.json --docs-dir docs --out _dist/docs-pipeline/llm/audit.json",
     "deno task test:docs-pipeline",

@@ -131,7 +131,9 @@ export type GeneratedDocsPayload = {
 };
 
 export const DETERMINISTIC_GENERATED_PAGE_PATHS = [
+  "development/architecture-overview.mdx",
   "development/directories/static-gecko.mdx",
+  "development/directories/browser-features/chrome/common.mdx",
   "development/directories/floorp-os-api.mdx",
   "development/features/browser-features/overview.mdx",
   "development/features/browser-features/chrome-common.mdx",
@@ -155,11 +157,9 @@ export const DETERMINISTIC_GENERATED_PAGE_PATHS = [
 ] as const;
 
 export const REQUIRED_GENERATED_PAGE_PATHS = [
-  "development/architecture-overview.mdx",
   "development/directories/bridge.mdx",
   "development/directories/browser-features/overview.mdx",
   "development/directories/browser-features/chrome/overview.mdx",
-  "development/directories/browser-features/chrome/common.mdx",
   "development/directories/browser-features/chrome/static.mdx",
   "development/directories/browser-features/modules/overview.mdx",
   "development/directories/browser-features/modules/browser-glue.mdx",
