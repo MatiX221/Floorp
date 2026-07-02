@@ -124,6 +124,7 @@
             "openNext": "現在のタブの隣に開く",
             "other": "その他のタブ設定",
             "doubleClickToClose": "ダブルクリックでタブを閉じる",
+            "tabDragToSplitCreate": "タブをドラッグして分割ビューを作成できる",
             "minWidth": "タブの最小幅",
             "minWidthError": "タブの幅は、 {{min}} から {{max}} ピクセルの間でなければなりません。",
             "minHeight": "タブの最小高さ",

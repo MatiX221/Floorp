@@ -31,6 +31,8 @@ import { forceCleanupDragState } from "../utils/force-cleanup.js";
 
 const TAB_DROP_TYPE = "application/x-moz-tabbrowser-tab";
 const NEW_WINDOW_ZONE_ID = "floorp-new-window-drop-zone";
+const PREF_SPLIT_VIEW_DND_CREATION_ENABLED =
+  "floorp.splitView.dragToSplitCreate.enabled";
 
 let activeZone: DropZone = "right";
 let isTabDragging = false;
@@ -83,6 +85,10 @@ let stuckDragWatchdog: ReturnType<typeof setTimeout> | null = null;
 
 const t = (key: string, opts?: Record<string, string>): string =>
   (i18next.t as (k: string, o?: Record<string, string>) => string)(key, opts);
+
+export function isTabDragToSplitCreationEnabled(): boolean {
+  return Services.prefs.getBoolPref(PREF_SPLIT_VIEW_DND_CREATION_ENABLED, true);
+}
 
 function getTabpanels(): HTMLElement | null {
   return document?.getElementById("tabbrowser-tabpanels") as HTMLElement | null;
@@ -274,6 +280,10 @@ function getOrCreateNewWindowZone(): HTMLElement | null {
 }
 
 function showNewWindowZone(): void {
+  if (!isTabDragToSplitCreationEnabled()) {
+    return;
+  }
+
   const zone = getOrCreateNewWindowZone();
   if (zone) {
     zone.setAttribute("drag-active", "true");
@@ -295,17 +305,29 @@ function removeNewWindowZone(): void {
 }
 
 function onNewWindowZoneDragOver(event: DragEvent): void {
+  if (!isTabDragToSplitCreationEnabled()) {
+    return;
+  }
+
   if (!isTabDrag(event)) return;
   const zone = document?.getElementById(NEW_WINDOW_ZONE_ID);
   if (zone) zone.setAttribute("drag-hover", "true");
 }
 
 function onNewWindowZoneDragLeave(): void {
+  if (!isTabDragToSplitCreationEnabled()) {
+    return;
+  }
+
   const zone = document?.getElementById(NEW_WINDOW_ZONE_ID);
   if (zone) zone.removeAttribute("drag-hover");
 }
 
 function onNewWindowZoneDrop(event: DragEvent): void {
+  if (!isTabDragToSplitCreationEnabled()) {
+    return;
+  }
+
   event.stopPropagation();
   event.preventDefault();
   const zone = document?.getElementById(NEW_WINDOW_ZONE_ID);
@@ -334,6 +356,13 @@ function isEventInsideNewWindowZone(event: DragEvent): boolean {
 }
 
 function onDragOver(event: DragEvent): void {
+  if (!isTabDragToSplitCreationEnabled()) {
+    if (isTabDragging) {
+      cleanup();
+    }
+    return;
+  }
+
   const types = event.dataTransfer?.types;
   const hasTabType = types ? Array.from(types).includes(TAB_DROP_TYPE) : false;
   if (!hasTabType) return;
@@ -417,6 +446,13 @@ function onDragOver(event: DragEvent): void {
 }
 
 function onDrop(event: DragEvent): void {
+  if (!isTabDragToSplitCreationEnabled()) {
+    if (isTabDragging) {
+      cleanup();
+    }
+    return;
+  }
+
   if (!isTabDrag(event)) return;
 
   // Bug 2: Don't intercept drops inside the new window zone
@@ -613,6 +649,13 @@ function flushPendingCreationOnDragEnd(): void {
 }
 
 function onDragEnd(): void {
+  if (!isTabDragToSplitCreationEnabled()) {
+    if (isTabDragging) {
+      cleanup();
+    }
+    return;
+  }
+
   // Run deferred split-view creation FIRST, before cleanup(), so that it
   // executes in the same `dragend` task — after native `handle_dragend` has
   // cleared transforms/inline-styles via `finishAnimateTabMove` and
@@ -652,6 +695,13 @@ function onDragLeave(event: DragEvent): void {
 
 /** Capture split view state and dragged tab on dragstart. */
 function onDragStart(event: DragEvent): void {
+  if (!isTabDragToSplitCreationEnabled()) {
+    if (isTabDragging) {
+      cleanup();
+    }
+    return;
+  }
+
   const types = event.dataTransfer?.types;
   if (!types) return;
   if (!Array.from(types).includes(TAB_DROP_TYPE)) return;
