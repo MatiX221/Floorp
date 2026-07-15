@@ -31,20 +31,6 @@ export function SidebarSelectbox(props: { ctx: CPanelSidebar }) {
       <xul:vbox id="panel-sidebar-bottomButtonBox">
         <xul:toolbarbutton
           class="panel-sidebar-panel"
-          onCommand={() =>
-            globalThis.BrowserAddonUI.openAddonsMgr("addons://list/extension")}
-          id="panel-sidebar-addons-icon"
-        />
-        <xul:toolbarbutton
-          class="panel-sidebar-panel"
-          onCommand={() =>
-            globalThis.gBrowser.addTrustedTab("about:logins", {
-              inBackground: false,
-            })}
-          id="panel-sidebar-passwords-icon"
-        />
-        <xul:toolbarbutton
-          class="panel-sidebar-panel"
           onCommand={() => globalThis.openPreferences()}
           id="panel-sidebar-preferences-icon"
         />
