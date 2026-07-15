@@ -6,7 +6,11 @@ import {
   runTests,
   type TestCase,
 } from "../../../test/utils/test_harness.ts";
-import { resolveDropIndicatorTarget } from "../multirow-tabbar/tab-drag-drop-manager.ts";
+import {
+  cleanupOwnedDropIndicator,
+  DropIndicatorOwnership,
+  resolveDropIndicatorTarget,
+} from "../multirow-tabbar/tab-drag-drop-manager.ts";
 
 // ---------------------------------------------------------------------------
 // Tests — TabDragDropManager dragend listener
@@ -121,6 +125,116 @@ function testDropIndicatorTargets(): void {
   );
 }
 
+function createDropIndicator(): XULElement {
+  return document!.createXULElement("hbox") as XULElement;
+}
+
+function showDropIndicator(indicator: XULElement, offset: number): void {
+  indicator.hidden = false;
+  indicator.style.setProperty(
+    "transform",
+    `translate(${offset}px, ${offset}px)`,
+  );
+  indicator.style.setProperty("margin-inline-start", `-${offset}px`);
+}
+
+function testDropIndicatorCleanup(): void {
+  cleanupOwnedDropIndicator(null);
+
+  const indicator = createDropIndicator();
+  showDropIndicator(indicator, 24);
+  indicator.style.setProperty("opacity", "0.5");
+
+  cleanupOwnedDropIndicator(indicator);
+
+  assertEquals(indicator.hidden, true, "cleanup should hide the indicator");
+  assertEquals(
+    indicator.style.getPropertyValue("transform"),
+    "",
+    "cleanup should clear the custom transform",
+  );
+  assertEquals(
+    indicator.style.getPropertyValue("margin-inline-start"),
+    "",
+    "cleanup should clear the custom inline margin",
+  );
+  assertEquals(
+    indicator.style.getPropertyValue("opacity"),
+    "0.5",
+    "cleanup should preserve unrelated inline styles",
+  );
+
+  cleanupOwnedDropIndicator(indicator);
+  assertEquals(
+    indicator.hidden,
+    true,
+    "repeated cleanup should remain safe",
+  );
+}
+
+function testDropIndicatorOwnershipTransfer(): void {
+  const ownership = new DropIndicatorOwnership();
+  const first = createDropIndicator();
+  const second = createDropIndicator();
+
+  showDropIndicator(first, 16);
+  assertEquals(
+    ownership.acquire(first),
+    first,
+    "the first indicator should be acquired",
+  );
+  ownership.acquire(first);
+  assertEquals(
+    first.hidden,
+    false,
+    "reacquiring the same indicator should not clean it up",
+  );
+
+  showDropIndicator(second, 32);
+  ownership.acquire(second);
+  assertEquals(
+    first.hidden,
+    true,
+    "replacing the owned indicator should hide the old node",
+  );
+  assertEquals(
+    first.style.getPropertyValue("transform"),
+    "",
+    "replacing the owned indicator should clear the old transform",
+  );
+  assertEquals(
+    second.hidden,
+    false,
+    "acquiring a replacement should not mutate the new node",
+  );
+
+  assertEquals(
+    ownership.take(),
+    second,
+    "take should return the currently owned indicator",
+  );
+  assertEquals(
+    ownership.take(),
+    null,
+    "take should clear ownership before returning",
+  );
+  cleanupOwnedDropIndicator(second);
+  assertEquals(
+    second.hidden,
+    true,
+    "a taken detached indicator should still be cleanable",
+  );
+
+  showDropIndicator(first, 48);
+  ownership.acquire(first);
+  cleanupOwnedDropIndicator(ownership.take());
+  assertEquals(
+    first.hidden,
+    true,
+    "an indicator should be reusable after an earlier cleanup",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Test runner
 // ---------------------------------------------------------------------------
@@ -135,6 +249,14 @@ const tests: TestCase[] = [
   {
     name: "drop indicator targets include index zero",
     fn: testDropIndicatorTargets,
+  },
+  {
+    name: "owned drop indicator cleanup is scoped and idempotent",
+    fn: testDropIndicatorCleanup,
+  },
+  {
+    name: "drop indicator ownership transfers between XUL nodes",
+    fn: testDropIndicatorOwnershipTransfer,
   },
 ];
 

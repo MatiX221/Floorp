@@ -31,6 +31,58 @@ export function resolveDropIndicatorTarget(
     : { tabIndex: dropIndex, atEnd: false };
 }
 
+export function cleanupOwnedDropIndicator(
+  indicator: XULElement | null,
+): void {
+  if (!indicator) return;
+
+  try {
+    indicator.hidden = true;
+  } catch (error) {
+    console.error(
+      "[TabDragDropManager] Failed to hide the drop indicator:",
+      error,
+    );
+  }
+
+  try {
+    indicator.style.removeProperty("transform");
+  } catch (error) {
+    console.error(
+      "[TabDragDropManager] Failed to clear the drop indicator transform:",
+      error,
+    );
+  }
+
+  try {
+    indicator.style.removeProperty("margin-inline-start");
+  } catch (error) {
+    console.error(
+      "[TabDragDropManager] Failed to clear the drop indicator margin:",
+      error,
+    );
+  }
+}
+
+export class DropIndicatorOwnership {
+  private indicator: XULElement | null = null;
+
+  acquire(indicator: XULElement): XULElement {
+    if (this.indicator === indicator) return indicator;
+
+    const previousIndicator = this.take();
+    cleanupOwnedDropIndicator(previousIndicator);
+    this.indicator = indicator;
+    return indicator;
+  }
+
+  take(): XULElement | null {
+    const indicator = this.indicator;
+    this.indicator = null;
+    return indicator;
+  }
+}
+
 export class TabDragDropManager {
   private lastKnownIndex: number | null = null;
   private groupToInsertTo: XULElement | null = null;
@@ -54,6 +106,7 @@ export class TabDragDropManager {
   private dragOverEventListener: ((e: Event) => void) | null = null;
   private dragEndEventListener: ((e: Event) => void) | null = null;
   private dragStartEventListener: ((e: Event) => void) | null = null;
+  private readonly dropIndicatorOwnership = new DropIndicatorOwnership();
 
   constructor(
     private readonly resolveTabsContainer: () => XULElement | null,
@@ -151,11 +204,11 @@ export class TabDragDropManager {
   }
 
   uninstall(): void {
+    this.deactivateDragSession();
+
     if (!this.arrowScrollbox) return;
 
     const tabContainer = gBrowser.tabContainer;
-
-    this.deactivateDragSession();
 
     // Remove capture-phase listeners
     if (this.dragOverEventListener) {
@@ -207,29 +260,60 @@ export class TabDragDropManager {
   }
 
   private deactivateDragSession(): void {
-    const tabContainer = gBrowser.tabContainer;
-    if (this.listenersActive) {
-      if (this.hadOwnGetDropIndex) {
-        tabContainer._getDropIndex = this.originalGetDropIndex;
-      } else {
-        delete tabContainer._getDropIndex;
+    const ownedIndicator = this.dropIndicatorOwnership.take();
+
+    try {
+      const tabContainer = gBrowser.tabContainer;
+      if (this.listenersActive) {
+        this.restoreOverride("_getDropIndex", () => {
+          if (this.hadOwnGetDropIndex) {
+            tabContainer._getDropIndex = this.originalGetDropIndex;
+          } else {
+            delete tabContainer._getDropIndex;
+          }
+        });
+        this.restoreOverride("getDropEffectForTabDrag", () => {
+          if (this.hadOwnGetDropEffectForTabDrag) {
+            tabContainer.getDropEffectForTabDrag =
+              this.originalGetDropEffectForTabDrag;
+          } else {
+            delete tabContainer.getDropEffectForTabDrag;
+          }
+        });
+        this.restoreOverride("_getDropEffectForTabDrag", () => {
+          if (this.hadOwnUnderscoreGetDropEffectForTabDrag) {
+            tabContainer._getDropEffectForTabDrag =
+              this.originalUnderscoreGetDropEffectForTabDrag;
+          } else {
+            delete tabContainer._getDropEffectForTabDrag;
+          }
+        });
       }
-      if (this.hadOwnGetDropEffectForTabDrag) {
-        tabContainer.getDropEffectForTabDrag =
-          this.originalGetDropEffectForTabDrag;
-      } else {
-        delete tabContainer.getDropEffectForTabDrag;
-      }
-      if (this.hadOwnUnderscoreGetDropEffectForTabDrag) {
-        tabContainer._getDropEffectForTabDrag =
-          this.originalUnderscoreGetDropEffectForTabDrag;
-      } else {
-        delete tabContainer._getDropEffectForTabDrag;
+    } catch (error) {
+      console.error(
+        "[TabDragDropManager] Failed to access the tab container during cleanup:",
+        error,
+      );
+    } finally {
+      try {
+        cleanupOwnedDropIndicator(ownedIndicator);
+      } finally {
+        this.listenersActive = false;
+        this.draggedTabIndex = null;
+        this.resetState();
       }
     }
-    this.listenersActive = false;
-    this.draggedTabIndex = null;
-    this.resetState();
+  }
+
+  private restoreOverride(name: string, restore: () => void): void {
+    try {
+      restore();
+    } catch (error) {
+      console.error(
+        `[TabDragDropManager] Failed to restore ${name}:`,
+        error,
+      );
+    }
   }
 
   private getTabFromEventTarget(
@@ -271,8 +355,9 @@ export class TabDragDropManager {
     event.stopPropagation();
 
     const tabContainer = gBrowser.tabContainer;
-    const indicator =
-      tabContainer.getElementsByClassName("tab-drop-indicator")[0];
+    const indicator = tabContainer.getElementsByClassName(
+      "tab-drop-indicator",
+    )[0] as XULElement | undefined;
 
     const effects = this.orig_getDropEffectForTabDrag(event);
     let tab: XULElement | null = null;
@@ -289,7 +374,7 @@ export class TabDragDropManager {
         ) {
           tabContainer.selectedItem = tab;
         }
-        (indicator as HTMLElement).hidden = true;
+        if (indicator) indicator.hidden = true;
         return;
       }
     }
@@ -328,14 +413,15 @@ export class TabDragDropManager {
 
     const indicatorTarget = resolveDropIndicatorTarget(dropIndex, tabs.length);
     if (!indicatorTarget) {
-      (indicator as HTMLElement).hidden = true;
+      if (indicator) indicator.hidden = true;
       return;
     }
 
+    this.lastKnownIndex = dropIndex;
+    if (!indicator) return;
+
     const ltr = window.getComputedStyle(tabContainer).direction === "ltr";
     const rect = tabContainer.arrowScrollbox.getBoundingClientRect();
-
-    this.lastKnownIndex = dropIndex;
 
     let newMarginX: number;
     let newMarginY: number;
@@ -358,13 +444,13 @@ export class TabDragDropManager {
     newMarginX += indicator.clientWidth / 2;
     if (!ltr) newMarginX *= -1;
 
-    const htmlIndicator = indicator as HTMLElement;
-    htmlIndicator.hidden = false;
-    htmlIndicator.style.setProperty(
+    const ownedIndicator = this.dropIndicatorOwnership.acquire(indicator);
+    ownedIndicator.hidden = false;
+    ownedIndicator.style.setProperty(
       "transform",
       `translate(${Math.round(newMarginX)}px, ${Math.round(newMarginY)}px)`,
     );
-    htmlIndicator.style.setProperty(
+    ownedIndicator.style.setProperty(
       "margin-inline-start",
       -indicator.clientWidth + "px",
     );
