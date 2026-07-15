@@ -270,14 +270,8 @@ export function WorkspacesPanels(props: { ctx?: WorkspacesService } = {}) {
                 <WorkspacePanelButton workspaceId={workspaceId} ctx={service} />
               )}
             </For>
-            <ControlButton
-              id="workspaces-panel-create"
-              icon="chrome://global/skin/icons/plus.svg"
-              label={texts().createNew}
-              onActivate={handleCreateWorkspace}
-            />
           </xul:vbox>
-          <xul:spacer flex="1" />
+          <xul:separator class="workspaces-panel-divider" />
         </>
       )}
     </Show>
