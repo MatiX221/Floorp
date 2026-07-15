@@ -410,3 +410,22 @@
     border: 2px solid var(--toolbarbutton-active-background, rgba(0, 0, 0, 0.2));
   }
 }
+
+.workspaces-panel-divider {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  appearance: none;
+  -moz-appearance: none;
+  border: none !important;
+  padding: 0 !important;
+
+  width: 20px !important;
+  margin-left: 9px !important;
+  margin-right: auto !important;
+
+  height: 1px !important;
+  margin-top: 5px !important;
+  margin-bottom: 0px !important;
+
+  background-color: rgba(255, 255, 255, 0.25) !important;
+}
