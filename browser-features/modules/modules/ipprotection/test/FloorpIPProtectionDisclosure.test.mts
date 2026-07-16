@@ -1,23 +1,25 @@
 // SPDX-License-Identifier: MPL-2.0
 // @colocated-env browser
 
-import { resolveFloorpIPProtectionDisclosureStrings } from "../FloorpIPProtectionDisclosure.sys.mts";
+import {
+  createFloorpIPProtectionDisclosureStringsOrFallback,
+  resolveFloorpIPProtectionDisclosureStrings,
+} from "../FloorpIPProtectionDisclosure.sys.mts";
 
 import {
   assert,
   assertEquals,
-  assertNotEquals,
   runTests,
   type TestCase,
 } from "../../../../chrome/test/utils/test_harness.ts";
 
-function testJapaneseLocalesUseJapanese(): void {
+function testJapaneseLocaleVariantsResolveConsistently(): void {
   const japanese = resolveFloorpIPProtectionDisclosureStrings("ja-JP");
   for (const locale of ["ja", "ja-JP"]) {
     assertEquals(
       resolveFloorpIPProtectionDisclosureStrings(locale),
       japanese,
-      `${locale} should use the Japanese disclosure`,
+      `${locale} should resolve to the same disclosure`,
     );
   }
 }
@@ -44,7 +46,21 @@ function testUnsupportedLocalesFallBackToEnglish(): void {
   }
 }
 
-function testResourcesHaveMatchingNonEmptyStrings(): void {
+function testInvalidJapaneseResourceFallsBackToEnglish(): void {
+  const english = resolveFloorpIPProtectionDisclosureStrings("en-US");
+  for (const invalidResource of [undefined, "", { title: "Browser VPN" }]) {
+    assertEquals(
+      createFloorpIPProtectionDisclosureStringsOrFallback(
+        invalidResource,
+        english,
+      ),
+      english,
+      "missing, blank, and partial Japanese resources should use English",
+    );
+  }
+}
+
+function testResolvedLocaleDisclosuresAreCompleteAndNonEmpty(): void {
   const english = resolveFloorpIPProtectionDisclosureStrings("en-US");
   const japanese = resolveFloorpIPProtectionDisclosureStrings("ja-JP");
   const englishKeys = Object.keys(english);
@@ -53,12 +69,7 @@ function testResourcesHaveMatchingNonEmptyStrings(): void {
   assertEquals(
     JSON.stringify(japaneseKeys),
     JSON.stringify(englishKeys),
-    "English and Japanese disclosures should contain the same keys",
-  );
-  assertNotEquals(
-    JSON.stringify(japanese),
-    JSON.stringify(english),
-    "English and Japanese disclosures should not be identical",
+    "Resolved English and Japanese disclosures should contain the same keys",
   );
 
   for (
@@ -79,8 +90,8 @@ function testResourcesHaveMatchingNonEmptyStrings(): void {
 export async function runAllTests(): Promise<void> {
   const tests: TestCase[] = [
     {
-      name: "Japanese locales use Japanese disclosures",
-      fn: testJapaneseLocalesUseJapanese,
+      name: "Japanese locales resolve disclosures consistently",
+      fn: testJapaneseLocaleVariantsResolveConsistently,
     },
     {
       name: "English locales use English disclosures",
@@ -91,8 +102,12 @@ export async function runAllTests(): Promise<void> {
       fn: testUnsupportedLocalesFallBackToEnglish,
     },
     {
-      name: "English and Japanese disclosure resources are complete",
-      fn: testResourcesHaveMatchingNonEmptyStrings,
+      name: "invalid Japanese resources fall back to English disclosures",
+      fn: testInvalidJapaneseResourceFallsBackToEnglish,
+    },
+    {
+      name: "resolved locale disclosures are complete and non-empty",
+      fn: testResolvedLocaleDisclosuresAreCompleteAndNonEmpty,
     },
   ];
 

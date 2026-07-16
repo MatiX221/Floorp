@@ -15,6 +15,10 @@ type FloorpIPProtectionDisclosureStrings = Readonly<{
   settingsPromoMessage: string;
 }>;
 
+type FloorpIPProtectionDisclosureModule = Readonly<{
+  getFloorpIPProtectionDisclosureStrings: () => unknown;
+}>;
+
 type IPProtectionSettingItem = Readonly<{
   id?: string;
   l10nId?: string;
@@ -40,12 +44,6 @@ type IPProtectionPromo = HTMLElement & {
 // In Firefox browser chrome context, document is always available.
 // Gecko types declare it as `Document | null`, but it is never null here.
 const doc = document!;
-
-const { getFloorpIPProtectionDisclosureStrings } = ChromeUtils.importESModule(
-  "resource://noraneko/modules/ipprotection/FloorpIPProtectionDisclosure.sys.mjs",
-);
-const FLOORP_IP_PROTECTION_DISCLOSURE =
-  getFloorpIPProtectionDisclosureStrings() as FloorpIPProtectionDisclosureStrings;
 
 const FLOORP_HUB_WARNING_IDS = {
   container: "floorp-hub-warning",
@@ -1049,6 +1047,74 @@ function initHideNewTabPage(): void {
   }
 }
 
+let floorpIPProtectionDisclosure:
+  | FloorpIPProtectionDisclosureStrings
+  | null
+  | undefined;
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isFloorpIPProtectionDisclosureStrings(
+  value: unknown,
+): value is FloorpIPProtectionDisclosureStrings {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const strings = value as Readonly<Record<string, unknown>>;
+  return isNonEmptyString(strings["title"]) &&
+    isNonEmptyString(strings["scope"]) &&
+    isNonEmptyString(strings["fullDisclosure"]) &&
+    isNonEmptyString(strings["settingsPromoHeading"]) &&
+    isNonEmptyString(strings["settingsPromoMessage"]);
+}
+
+function isFloorpIPProtectionDisclosureModule(
+  value: unknown,
+): value is FloorpIPProtectionDisclosureModule {
+  return typeof value === "object" && value !== null &&
+    typeof (value as Readonly<Record<string, unknown>>)[
+        "getFloorpIPProtectionDisclosureStrings"
+      ] === "function";
+}
+
+function loadFloorpIPProtectionDisclosure():
+  | FloorpIPProtectionDisclosureStrings
+  | null {
+  if (floorpIPProtectionDisclosure !== undefined) {
+    return floorpIPProtectionDisclosure;
+  }
+
+  try {
+    const module = ChromeUtils.importESModule(
+      "resource://noraneko/modules/ipprotection/FloorpIPProtectionDisclosure.sys.mjs",
+    ) as unknown;
+    if (!isFloorpIPProtectionDisclosureModule(module)) {
+      throw new Error("IP Protection disclosure module has an invalid export.");
+    }
+
+    const disclosure = module.getFloorpIPProtectionDisclosureStrings();
+    if (!isFloorpIPProtectionDisclosureStrings(disclosure)) {
+      throw new Error(
+        "IP Protection disclosure module returned invalid strings.",
+      );
+    }
+
+    floorpIPProtectionDisclosure = disclosure;
+  } catch (error) {
+    floorpIPProtectionDisclosure = null;
+    console.error(
+      "[FloorpIPProtectionPreferences]",
+      "Failed to load IP Protection disclosure; skipping preferences adaptation.",
+      error,
+    );
+  }
+
+  return floorpIPProtectionDisclosure;
+}
+
 const FLOORP_IP_PROTECTION_READY_ATTRIBUTE = "data-floorp-ipprotection-ready";
 const FLOORP_IP_PROTECTION_DISCLOSURE_ID = "floorpIPProtectionDisclosure";
 
@@ -1093,6 +1159,7 @@ function ensureFloorpIPProtectionPreferencesStyle(): void {
 
 function updateFloorpIPProtectionGroupConfig(
   group: IPProtectionSettingGroup,
+  disclosure: FloorpIPProtectionDisclosureStrings,
 ): void {
   const config = group.config;
   if (!config?.items) {
@@ -1104,12 +1171,12 @@ function updateFloorpIPProtectionGroupConfig(
   );
   if (
     config.l10nId === undefined &&
-    config.controlAttrs?.label === FLOORP_IP_PROTECTION_DISCLOSURE.title &&
+    config.controlAttrs?.label === disclosure.title &&
     promoItem?.l10nId === undefined &&
     promoItem?.controlAttrs?.heading ===
-      FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoHeading &&
+      disclosure.settingsPromoHeading &&
     promoItem.controlAttrs.message ===
-      FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoMessage
+      disclosure.settingsPromoMessage
   ) {
     return;
   }
@@ -1118,7 +1185,7 @@ function updateFloorpIPProtectionGroupConfig(
     l10nId: undefined,
     controlAttrs: {
       ...config.controlAttrs,
-      label: FLOORP_IP_PROTECTION_DISCLOSURE.title,
+      label: disclosure.title,
     },
     items: items.map((item) =>
       item.id === "ipProtectionNotOptedInSection"
@@ -1127,8 +1194,8 @@ function updateFloorpIPProtectionGroupConfig(
           l10nId: undefined,
           controlAttrs: {
             ...item.controlAttrs,
-            heading: FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoHeading,
-            message: FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoMessage,
+            heading: disclosure.settingsPromoHeading,
+            message: disclosure.settingsPromoMessage,
           },
         }
         : item
@@ -1139,9 +1206,10 @@ function updateFloorpIPProtectionGroupConfig(
 
 function ensureOneFloorpIPProtectionPreferences(
   group: IPProtectionSettingGroup,
+  disclosure: FloorpIPProtectionDisclosureStrings,
 ): void {
   group.removeAttribute(FLOORP_IP_PROTECTION_READY_ATTRIBUTE);
-  updateFloorpIPProtectionGroupConfig(group);
+  updateFloorpIPProtectionGroupConfig(group, disclosure);
 
   const fieldset = group.querySelector("moz-fieldset") as
     | (HTMLElement & { label?: string })
@@ -1157,50 +1225,49 @@ function ensureOneFloorpIPProtectionPreferences(
   }
 
   fieldset.removeAttribute("data-l10n-id");
-  if (fieldset.label !== FLOORP_IP_PROTECTION_DISCLOSURE.title) {
-    fieldset.label = FLOORP_IP_PROTECTION_DISCLOSURE.title;
+  if (fieldset.label !== disclosure.title) {
+    fieldset.label = disclosure.title;
   }
   setElementAttributeIfChanged(
     fieldset,
     "label",
-    FLOORP_IP_PROTECTION_DISCLOSURE.title,
+    disclosure.title,
   );
 
   promo.removeAttribute("data-l10n-id");
   if (
-    promo.heading !== FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoHeading
+    promo.heading !== disclosure.settingsPromoHeading
   ) {
-    promo.heading = FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoHeading;
+    promo.heading = disclosure.settingsPromoHeading;
   }
   if (
-    promo.message !== FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoMessage
+    promo.message !== disclosure.settingsPromoMessage
   ) {
-    promo.message = FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoMessage;
+    promo.message = disclosure.settingsPromoMessage;
   }
   setElementAttributeIfChanged(
     promo,
     "heading",
-    FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoHeading,
+    disclosure.settingsPromoHeading,
   );
   setElementAttributeIfChanged(
     promo,
     "message",
-    FLOORP_IP_PROTECTION_DISCLOSURE.settingsPromoMessage,
+    disclosure.settingsPromoMessage,
   );
 
-  let disclosure = group.querySelector(
+  let disclosureElement = group.querySelector(
     `#${FLOORP_IP_PROTECTION_DISCLOSURE_ID}`,
   );
-  if (!disclosure) {
-    disclosure = doc.createElement("div");
-    disclosure.id = FLOORP_IP_PROTECTION_DISCLOSURE_ID;
-    disclosure.setAttribute("role", "note");
-    promoControl.before(disclosure);
+  if (!disclosureElement) {
+    disclosureElement = doc.createElement("div");
+    disclosureElement.id = FLOORP_IP_PROTECTION_DISCLOSURE_ID;
+    disclosureElement.setAttribute("role", "note");
+    promoControl.before(disclosureElement);
   }
-  const disclosureText =
-    `${FLOORP_IP_PROTECTION_DISCLOSURE.scope} ${FLOORP_IP_PROTECTION_DISCLOSURE.fullDisclosure}`;
-  if (disclosure.textContent !== disclosureText) {
-    disclosure.textContent = disclosureText;
+  const disclosureText = `${disclosure.scope} ${disclosure.fullDisclosure}`;
+  if (disclosureElement.textContent !== disclosureText) {
+    disclosureElement.textContent = disclosureText;
   }
   setElementAttributeIfChanged(
     group,
@@ -1209,13 +1276,15 @@ function ensureOneFloorpIPProtectionPreferences(
   );
 }
 
-function ensureFloorpIPProtectionPreferences(): void {
+function ensureFloorpIPProtectionPreferences(
+  disclosure: FloorpIPProtectionDisclosureStrings,
+): void {
   ensureFloorpIPProtectionPreferencesStyle();
   const groups = doc.querySelectorAll<IPProtectionSettingGroup>(
     'setting-group[groupid="ipprotection"]',
   );
   for (const group of groups) {
-    ensureOneFloorpIPProtectionPreferences(group);
+    ensureOneFloorpIPProtectionPreferences(group, disclosure);
   }
 }
 
@@ -1223,14 +1292,19 @@ let floorpIPProtectionPreferencesObserver: MutationObserver | null = null;
 
 function initFloorpIPProtectionPreferences(): void {
   const run = (): void => {
-    ensureFloorpIPProtectionPreferences();
+    const disclosure = loadFloorpIPProtectionDisclosure();
+    if (!disclosure) {
+      return;
+    }
+
+    ensureFloorpIPProtectionPreferences(disclosure);
     if (floorpIPProtectionPreferencesObserver) {
       return;
     }
     floorpIPProtectionPreferencesObserver = new (doc.defaultView as unknown as {
       MutationObserver: typeof MutationObserver;
     }).MutationObserver(() => {
-      ensureFloorpIPProtectionPreferences();
+      ensureFloorpIPProtectionPreferences(disclosure);
     });
     const target = doc.getElementById("mainPrefPane") ?? doc.body;
     if (target) {

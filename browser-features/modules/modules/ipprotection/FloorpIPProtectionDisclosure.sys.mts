@@ -57,6 +57,51 @@ type FloorpIPProtectionDisclosureResource = Readonly<{
   }>;
 }>;
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null;
+}
+
+function isFloorpIPProtectionDisclosureResource(
+  value: unknown,
+): value is FloorpIPProtectionDisclosureResource {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const toolbar = value["toolbar"];
+  const scope = value["scope"];
+  const unauthenticated = value["unauthenticated"];
+  const settings = value["settings"];
+  const terms = value["terms"];
+
+  return isNonEmptyString(value["title"]) &&
+    isRecord(toolbar) &&
+    isNonEmptyString(toolbar["activeTooltip"]) &&
+    isNonEmptyString(toolbar["inactiveTooltip"]) &&
+    isNonEmptyString(toolbar["excludedTooltip"]) &&
+    isNonEmptyString(toolbar["pausedTooltip"]) &&
+    isNonEmptyString(toolbar["errorTooltip"]) &&
+    isNonEmptyString(toolbar["helpTooltip"]) &&
+    isRecord(scope) &&
+    isNonEmptyString(scope["summary"]) &&
+    isNonEmptyString(scope["fullDisclosure"]) &&
+    isRecord(unauthenticated) &&
+    isNonEmptyString(unauthenticated["title"]) &&
+    isRecord(settings) &&
+    isNonEmptyString(settings["promoHeading"]) &&
+    isNonEmptyString(settings["promoMessage"]) &&
+    isRecord(terms) &&
+    isNonEmptyString(terms["prefix"]) &&
+    isNonEmptyString(terms["termsOfUse"]) &&
+    isNonEmptyString(terms["conjunction"]) &&
+    isNonEmptyString(terms["privacyNotice"]) &&
+    isNonEmptyString(terms["suffix"]);
+}
+
 function createDisclosureStrings(
   resource: FloorpIPProtectionDisclosureResource,
 ): FloorpIPProtectionDisclosureStrings {
@@ -81,11 +126,21 @@ function createDisclosureStrings(
   });
 }
 
+export function createFloorpIPProtectionDisclosureStringsOrFallback(
+  resource: unknown,
+  fallback: FloorpIPProtectionDisclosureStrings,
+): FloorpIPProtectionDisclosureStrings {
+  return isFloorpIPProtectionDisclosureResource(resource)
+    ? createDisclosureStrings(resource)
+    : fallback;
+}
+
 const ENGLISH_STRINGS = createDisclosureStrings(
   enUSBrowserChrome.ipProtection,
 );
-const JAPANESE_STRINGS = createDisclosureStrings(
-  jaJPBrowserChrome.ipProtection,
+const JAPANESE_STRINGS = createFloorpIPProtectionDisclosureStringsOrFallback(
+  (jaJPBrowserChrome as Readonly<Record<string, unknown>>)["ipProtection"],
+  ENGLISH_STRINGS,
 );
 
 export function resolveFloorpIPProtectionDisclosureStrings(
