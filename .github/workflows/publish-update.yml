@@ -52,18 +52,22 @@ jobs:
           INI=$(find . -iname "application.ini" | head -n1)
           if [ -z "$INI" ]; then
             echo "Could not find application.ini!" >&2
-            find . -maxdepth 4
             exit 1
           fi
-          VERSION=$(grep -m1 "^Version=" "$INI" | cut -d= -f2)
+
+          RAW_VERSION=$(grep -m1 "^Version=" "$INI" | cut -d= -f2)
+
+          FLOORP_VERSION=$(echo "$RAW_VERSION" | cut -d@ -f1)
+          GECKO_VERSION=$(echo "$RAW_VERSION" | cut -d@ -f2)
           BUILDID=$(grep -m1 "^BuildID=" "$INI" | cut -d= -f2)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "floorp_version=$FLOORP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "gecko_version=$GECKO_VERSION" >> "$GITHUB_OUTPUT"
           echo "buildid=$BUILDID" >> "$GITHUB_OUTPUT"
 
           MARFILE=$(find . -iname "*.mar" | head -n1)
           if [ -z "$MARFILE" ]; then
             echo "Could not find .mar file!" >&2
-            find . -maxdepth 4
             exit 1
           fi
           HASH=$(sha512sum "$MARFILE" | cut -d' ' -f1)
@@ -80,16 +84,16 @@ jobs:
 
           cp "${{ steps.info.outputs.marfile }}" update.mar
 
-          TAG="update-${{ steps.info.outputs.version }}-${{ steps.info.outputs.buildid }}"
+          TAG="update-${{ steps.info.outputs.floorp_version }}-${{ steps.info.outputs.buildid }}"
 
-          gh release create "$TAG" update.mar --title "Update ${{ steps.info.outputs.version }}" --notes "Automated MAR update patch for build ${{ steps.info.outputs.buildid }}" --repo ${{ github.repository }}
+          gh release create "$TAG" update.mar --title "Update ${{ steps.info.outputs.floorp_version }}" --notes "Automated MAR patch for build ${{ steps.info.outputs.buildid }}" --repo ${{ github.repository }}
 
           MAR_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/update.mar"
 
           cat > update.xml <<EOF
           <?xml version="1.0"?>
           <updates>
-            <update type="minor" displayVersion="${{ steps.info.outputs.version }}" appVersion="${{ steps.info.outputs.version }}" platformVersion="${{ steps.info.outputs.version }}" buildID="${{ steps.info.outputs.buildid }}">
+            <update type="minor" displayVersion="${{ steps.info.outputs.gecko_version }}@${{ steps.info.outputs.floorp_version }}" appVersion="${{ steps.info.outputs.gecko_version }}" platformVersion="${{ steps.info.outputs.gecko_version }}" buildID="${{ steps.info.outputs.buildid }}" appVersion2="${{ steps.info.outputs.floorp_version }}">
               <patch type="complete" URL="$MAR_URL" hashFunction="sha512" hashValue="${{ steps.info.outputs.hash }}" size="${{ steps.info.outputs.size }}"/>
             </update>
           </updates>
