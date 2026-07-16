@@ -75,7 +75,8 @@ jobs:
 
       - name: Generate update.xml
         run: |
-          cat > /tmp/artifacts/update.xml <<EOF
+          cd /tmp/artifacts
+          cat > update.xml <<EOF
           <?xml version="1.0"?>
           <updates>
             <update type="minor" displayVersion="${{ steps.info.outputs.version }}" appVersion="${{ steps.info.outputs.version }}" platformVersion="${{ steps.info.outputs.version }}" buildID="${{ steps.info.outputs.buildid }}">
@@ -83,7 +84,7 @@ jobs:
             </update>
           </updates>
           EOF
-          cp "${{ steps.info.outputs.marfile }}" /tmp/artifacts/update.mar
+          cp "${{ steps.info.outputs.marfile }}" update.mar
 
       - name: Publish to orphan updates branch
         run: |
