@@ -1,0 +1,90 @@
+name: Publish self-hosted update
+
+on:
+  workflow_run:
+    workflows: ["(A) 📦️ Package"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/artifacts && cd /tmp/artifacts
+          gh run download ${{ github.event.workflow_run.id }} --repo ${{ github.repository }} \
+            -n floorp-windows-x86_64-mar-full-unsigned \
+            -n noraneko-windows-x86_64-unsigned-binary
+
+          # in case artifact contents are nested inside another zip, unpack those too
+          find . -iname "*.zip" -exec sh -c 'unzip -o -q "$1" -d "$(dirname "$1")"' _ {} \;
+
+      - name: Extract version info and MAR stats
+        id: info
+        run: |
+          cd /tmp/artifacts
+          INI=$(find . -iname "application.ini" | head -n1)
+          if [ -z "$INI" ]; then
+            echo "Could not find application.ini!" >&2
+            find . -maxdepth 4
+            exit 1
+          fi
+          VERSION=$(grep -m1 "^Version=" "$INI" | cut -d= -f2)
+          BUILDID=$(grep -m1 "^BuildID=" "$INI" | cut -d= -f2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "buildid=$BUILDID" >> "$GITHUB_OUTPUT"
+
+          MARFILE=$(find . -iname "*.mar" | head -n1)
+          if [ -z "$MARFILE" ]; then
+            echo "Could not find .mar file!" >&2
+            find . -maxdepth 4
+            exit 1
+          fi
+          HASH=$(sha512sum "$MARFILE" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$MARFILE")
+          echo "marfile=$MARFILE" >> "$GITHUB_OUTPUT"
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Generate update.xml
+        run: |
+          cat > /tmp/artifacts/update.xml <<EOF
+          <?xml version="1.0"?>
+          <updates>
+            <update type="minor" displayVersion="${{ steps.info.outputs.version }}" appVersion="${{ steps.info.outputs.version }}" platformVersion="${{ steps.info.outputs.version }}" buildID="${{ steps.info.outputs.buildid }}">
+              <patch type="complete" URL="https://raw.githubusercontent.com/${{ github.repository }}/updates/update.mar" hashFunction="sha512" hashValue="${{ steps.info.outputs.hash }}" size="${{ steps.info.outputs.size }}"/>
+            </update>
+          </updates>
+          EOF
+          cp "${{ steps.info.outputs.marfile }}" /tmp/artifacts/update.mar
+
+      - name: Publish to orphan updates branch
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+          cd /tmp
+          git clone --depth 1 https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git publish-repo
+          cd publish-repo
+
+          if git ls-remote --exit-code --heads origin updates > /dev/null 2>&1; then
+            git fetch origin updates
+            git checkout updates
+            rm -f update.xml update.mar
+          else
+            git checkout --orphan updates
+            git rm -rf . > /dev/null 2>&1 || true
+          fi
+
+          cp /tmp/artifacts/update.xml .
+          cp /tmp/artifacts/update.mar .
+          git add update.xml update.mar
+          git commit -m "Publish update ${{ steps.info.outputs.version }} (build ${{ steps.info.outputs.buildid }}) [skip ci]"
+          git push origin updates
