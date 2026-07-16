@@ -30,7 +30,7 @@ jobs:
             TARGET_RUN_ID="${{ github.event.inputs.run_id }}"
           else
             echo "Finding the latest successful run for the Package workflow..."
-            TARGET_RUN_ID=$(gh run list --workflow="(A) 📦️ Package" --status=success --limit=1 --json databaseId -q '.[0].databaseId')
+            TARGET_RUN_ID=$(gh run list --workflow="(A) 📦️ Package" --status=success --limit=1 --repo ${{ github.repository }} --json databaseId -q '.[0].databaseId')
           fi
 
           if [ -z "$TARGET_RUN_ID" ] || [ "$TARGET_RUN_ID" == "null" ]; then
@@ -44,7 +44,6 @@ jobs:
             -n floorp-windows-x86_64-mar-full-unsigned \
             -n noraneko-windows-x86_64-unsigned-binary
 
-          # in case artifact contents are nested inside another zip, unpack those too
           find . -iname "*.zip" -exec sh -c 'unzip -o -q "$1" -d "$(dirname "$1")"' _ {} \;
 
       - name: Extract version info and MAR stats
