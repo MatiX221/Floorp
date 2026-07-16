@@ -29,7 +29,6 @@ jobs:
           elif [ -n "${{ github.event.inputs.run_id }}" ]; then
             TARGET_RUN_ID="${{ github.event.inputs.run_id }}"
           else
-            echo "Finding the latest successful run for the Package workflow..."
             TARGET_RUN_ID=$(gh run list --workflow="(A) 📦️ Package" --status=success --limit=1 --repo ${{ github.repository }} --json databaseId -q '.[0].databaseId')
           fi
 
@@ -73,18 +72,28 @@ jobs:
           echo "hash=$HASH" >> "$GITHUB_OUTPUT"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
 
-      - name: Generate update.xml
+      - name: Generate update.xml and Upload MAR to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd /tmp/artifacts
+
+          cp "${{ steps.info.outputs.marfile }}" update.mar
+
+          TAG="update-${{ steps.info.outputs.version }}-${{ steps.info.outputs.buildid }}"
+
+          gh release create "$TAG" update.mar --title "Update ${{ steps.info.outputs.version }}" --notes "Automated MAR update patch for build ${{ steps.info.outputs.buildid }}" --repo ${{ github.repository }}
+
+          MAR_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/update.mar"
+
           cat > update.xml <<EOF
           <?xml version="1.0"?>
           <updates>
             <update type="minor" displayVersion="${{ steps.info.outputs.version }}" appVersion="${{ steps.info.outputs.version }}" platformVersion="${{ steps.info.outputs.version }}" buildID="${{ steps.info.outputs.buildid }}">
-              <patch type="complete" URL="https://raw.githubusercontent.com/${{ github.repository }}/updates/update.mar" hashFunction="sha512" hashValue="${{ steps.info.outputs.hash }}" size="${{ steps.info.outputs.size }}"/>
+              <patch type="complete" URL="$MAR_URL" hashFunction="sha512" hashValue="${{ steps.info.outputs.hash }}" size="${{ steps.info.outputs.size }}"/>
             </update>
           </updates>
           EOF
-          cp "${{ steps.info.outputs.marfile }}" update.mar
 
       - name: Publish to orphan updates branch
         run: |
@@ -98,14 +107,14 @@ jobs:
           if git ls-remote --exit-code --heads origin updates > /dev/null 2>&1; then
             git fetch origin updates
             git checkout updates
-            rm -f update.xml update.mar
+            rm -f update.xml
           else
             git checkout --orphan updates
             git rm -rf . > /dev/null 2>&1 || true
           fi
 
           cp /tmp/artifacts/update.xml .
-          cp /tmp/artifacts/update.mar .
-          git add update.xml update.mar
+
+          git add update.xml
           git commit -m "Publish update ${{ steps.info.outputs.version }} (build ${{ steps.info.outputs.buildid }}) [skip ci]"
           git push origin updates
