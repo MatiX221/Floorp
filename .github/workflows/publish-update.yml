@@ -4,6 +4,12 @@ on:
   workflow_run:
     workflows: ["(A) 📦️ Package"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Optional: Specific Run ID to publish. Leave blank to auto-grab the latest successful build."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -11,15 +17,30 @@ permissions:
 
 jobs:
   publish:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Download build artifacts
+      - name: Determine Run ID and Download build artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            TARGET_RUN_ID="${{ github.event.workflow_run.id }}"
+          elif [ -n "${{ github.event.inputs.run_id }}" ]; then
+            TARGET_RUN_ID="${{ github.event.inputs.run_id }}"
+          else
+            echo "Finding the latest successful run for the Package workflow..."
+            TARGET_RUN_ID=$(gh run list --workflow="(A) 📦️ Package" --status=success --limit=1 --json databaseId -q '.[0].databaseId')
+          fi
+
+          if [ -z "$TARGET_RUN_ID" ] || [ "$TARGET_RUN_ID" == "null" ]; then
+            echo "Error: Could not determine a valid Run ID. Did the package workflow succeed?"
+            exit 1
+          fi
+
+          echo "Using Run ID: $TARGET_RUN_ID"
           mkdir -p /tmp/artifacts && cd /tmp/artifacts
-          gh run download ${{ github.event.workflow_run.id }} --repo ${{ github.repository }} \
+          gh run download $TARGET_RUN_ID --repo ${{ github.repository }} \
             -n floorp-windows-x86_64-mar-full-unsigned \
             -n noraneko-windows-x86_64-unsigned-binary
 
