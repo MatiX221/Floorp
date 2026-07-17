@@ -137,7 +137,7 @@ export function Tab() {
         <div>
           <div className="flex justify-between items-center mb-2">
             <label htmlFor="tab-min-width">{t("design.tab.minWidth")}</label>
-            <span className="text-sm text-muted-foreground">60px - 300px</span>
+            <span className="text-sm text-muted-foreground">30px - 300px</span>
           </div>
           <Input
             id="tab-min-width"
@@ -147,10 +147,10 @@ export function Tab() {
               setValue("tabMinWidth", Number(e.target.value))}
             className="w-full"
           />
-          {(getValues("tabMinWidth") < 60 || getValues("tabMinWidth") > 300) &&
+          {(getValues("tabMinWidth") < 30 || getValues("tabMinWidth") > 300) &&
             (
               <p className="text-destructive text-sm mt-1">
-                {t("design.tab.minWidthError", { min: 60, max: 300 })}
+                {t("design.tab.minWidthError", { min: 30, max: 300 })}
               </p>
             )}
         </div>
