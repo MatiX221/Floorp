@@ -34,7 +34,7 @@ export class TabSizeSpecification {
     }
 
     if (
-      typeof validatedMinW !== "number" || validatedMinW < 60 ||
+      typeof validatedMinW !== "number" || validatedMinW < 30 ||
       validatedMinW > 300
     ) {
       console.warn(
