@@ -5,6 +5,27 @@
 
 .tabbrowser-tab[class]:not([pinned]) {
   min-width: var(--floorp-tab-min-width) !important;
+  transition-property: max-width !important;
+}
+
+.tabbrowser-tab[class]:not([pinned]):not([selected]):is(
+    [muted],
+    [soundplaying],
+    [activemedia-blocked]
+  ) {
+  min-width: max(var(--floorp-tab-min-width), calc(30px + 24px)) !important;
+}
+
+.tabbrowser-tab[class]:not([pinned])[selected] {
+  min-width: max(var(--floorp-tab-min-width), calc(30px + 32px)) !important;
+}
+
+.tabbrowser-tab[class]:not([pinned])[selected]:is(
+    [muted],
+    [soundplaying],
+    [activemedia-blocked]
+  ) {
+  min-width: max(var(--floorp-tab-min-width), calc(30px + 56px)) !important;
 }
 
 .tabbrowser-tab[class] {
