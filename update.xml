@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <updates>
-  <update type="minor" displayVersion="152.0.5@12.16.4" appVersion="152.0.5" platformVersion="152.0.5" buildID="20260802190437" appVersion2="12.16.4" buildID2="019fc3dc-a791-7575-878e-8b29de4d9ec0">
-    <patch type="complete" URL="https://github.com/MatiX221/Floorp/releases/download/update-12.16.4-20260802190437/update.mar" hashFunction="sha512" hashValue="37d8a3db22d8aa411ea2c347b8865bc442b88db59126c7dc3345797991f2f3ea3a568da8000c03e51b7865440fef109cec7a73e08c3e7ef95629febc12edcb1f" size="107194348"/>
+  <update type="minor" displayVersion="152.0.5@12.16.4" appVersion="152.0.5" platformVersion="152.0.5" buildID="20260803192738" appVersion2="12.16.4" buildID2="019fc918-1847-776e-b121-a0f3e4b89c40">
+    <patch type="complete" URL="https://github.com/MatiX221/Floorp/releases/download/update-12.16.4-20260803192738/update.mar" hashFunction="sha512" hashValue="591c2492c0be43ea42b5f663d5fd8bd3567fd84e97d8ebb713a9a34f27099c534ecae2c3b993e5bd6f2fa93116175dfad9b3c36a7705a78ae02b30f4a0d84cc9" size="107151368"/>
   </update>
 </updates>
