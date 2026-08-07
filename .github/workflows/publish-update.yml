@@ -1,0 +1,155 @@
+name: Publish self-hosted update
+
+on:
+  workflow_run:
+    workflows: ["(A) 📦️ Package"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Optional: Specific Run ID to publish. Leave blank to auto-grab the latest successful build."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine Run ID and Download build artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            TARGET_RUN_ID="${{ github.event.workflow_run.id }}"
+          elif [ -n "${{ github.event.inputs.run_id }}" ]; then
+            TARGET_RUN_ID="${{ github.event.inputs.run_id }}"
+          else
+            TARGET_RUN_ID=$(gh run list --workflow="(A) 📦️ Package" --status=success --limit=1 --repo ${{ github.repository }} --json databaseId -q '.[0].databaseId')
+          fi
+
+          if [ -z "$TARGET_RUN_ID" ] || [ "$TARGET_RUN_ID" == "null" ]; then
+            echo "Error: Could not determine a valid Run ID. Did the package workflow succeed?"
+            exit 1
+          fi
+
+          echo "Using Run ID: $TARGET_RUN_ID"
+          mkdir -p /tmp/artifacts && cd /tmp/artifacts
+          gh run download $TARGET_RUN_ID --repo ${{ github.repository }} \
+            -n floorp-windows-x86_64-mar-full-unsigned \
+            -n noraneko-windows-x86_64-unsigned-binary
+
+          find . -iname "*.zip" -exec sh -c 'unzip -o -q "$1" -d "$(dirname "$1")"' _ {} \;
+
+      - name: Extract version info and MAR stats
+        id: info
+        run: |
+          cd /tmp/artifacts
+          INI=$(find . -iname "application.ini" | head -n1)
+          if [ -z "$INI" ]; then
+            echo "Could not find application.ini!" >&2
+            exit 1
+          fi
+
+          RAW_VERSION=$(grep -m1 "^Version=" "$INI" | cut -d= -f2)
+          FLOORP_VERSION=$(echo "$RAW_VERSION" | cut -d@ -f1)
+          GECKO_VERSION=$(echo "$RAW_VERSION" | cut -d@ -f2)
+          BUILDID=$(grep -m1 "^BuildID=" "$INI" | cut -d= -f2)
+
+          BUILDID2FILE=$(find . -path "*noraneko-windows-x86_64-unsigned-binary*buildid2" | head -n1)
+          if [ -z "$BUILDID2FILE" ]; then
+            BUILDID2FILE=$(find . -iname "buildid2" | head -n1)
+          fi
+
+          if [ -z "$BUILDID2FILE" ]; then
+            echo "WARNING: buildid2 file not found in artifacts!" >&2
+            find . -maxdepth 4
+            BUILDID2=""
+          else
+            BUILDID2=$(cat "$BUILDID2FILE" | tr -d '[:space:]')
+          fi
+
+          MARFILE=$(find . -iname "*.mar" | head -n1)
+          if [ -z "$MARFILE" ]; then
+            echo "Could not find .mar file!" >&2
+            exit 1
+          fi
+          HASH=$(sha512sum "$MARFILE" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$MARFILE")
+
+          echo "==========================================="
+          echo "Extracted Variables:"
+          echo "RAW_VERSION:    $RAW_VERSION"
+          echo "FLOORP_VERSION: $FLOORP_VERSION"
+          echo "GECKO_VERSION:  $GECKO_VERSION"
+          echo "BUILDID:        $BUILDID"
+          echo "BUILDID2:       $BUILDID2"
+          echo "MARFILE:        $MARFILE"
+          echo "HASH:           $HASH"
+          echo "SIZE:           $SIZE"
+          echo "==========================================="
+
+          echo "floorp_version=$FLOORP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "gecko_version=$GECKO_VERSION" >> "$GITHUB_OUTPUT"
+          echo "buildid=$BUILDID" >> "$GITHUB_OUTPUT"
+          echo "buildid2=$BUILDID2" >> "$GITHUB_OUTPUT"
+          echo "marfile=$MARFILE" >> "$GITHUB_OUTPUT"
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Generate update.xml and Upload MAR to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd /tmp/artifacts
+
+          cp "${{ steps.info.outputs.marfile }}" update.mar
+
+          TAG="update-${{ steps.info.outputs.floorp_version }}-${{ steps.info.outputs.buildid }}"
+
+          gh release create "$TAG" --title "Update ${{ steps.info.outputs.floorp_version }}" --notes "Automated MAR patch for build ${{ steps.info.outputs.buildid }}" --repo ${{ github.repository }} || echo "Release $TAG already exists, skipping creation."
+
+          gh release upload "$TAG" update.mar --clobber --repo ${{ github.repository }}
+
+          MAR_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/update.mar"
+
+          cat > update.xml <<EOF
+          <?xml version="1.0"?>
+          <updates>
+            <update type="minor" displayVersion="${{ steps.info.outputs.gecko_version }}@${{ steps.info.outputs.floorp_version }}" appVersion="${{ steps.info.outputs.gecko_version }}" platformVersion="${{ steps.info.outputs.gecko_version }}" buildID="${{ steps.info.outputs.buildid }}" appVersion2="${{ steps.info.outputs.floorp_version }}" buildID2="${{ steps.info.outputs.buildid2 }}">
+              <patch type="complete" URL="$MAR_URL" hashFunction="sha512" hashValue="${{ steps.info.outputs.hash }}" size="${{ steps.info.outputs.size }}"/>
+            </update>
+          </updates>
+          EOF
+
+      - name: Publish to orphan updates branch
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+          cd /tmp
+          git clone --depth 1 https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git publish-repo
+          cd publish-repo
+
+          if git ls-remote --exit-code --heads origin updates > /dev/null 2>&1; then
+            git fetch origin updates:updates
+            git checkout updates
+            rm -f update.xml
+          else
+            git checkout --orphan updates
+            git rm -rf . > /dev/null 2>&1 || true
+          fi
+
+          cp /tmp/artifacts/update.xml .
+          git add update.xml
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "Publish update ${{ steps.info.outputs.floorp_version }} (build ${{ steps.info.outputs.buildid }}) [skip ci]"
+            git push origin updates
+          else
+            echo "No changes detected in update.xml. Skipping commit and push."
+          fi
