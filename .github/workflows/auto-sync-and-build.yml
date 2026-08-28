@@ -1,0 +1,171 @@
+name: Sync upstream, rebase, and build
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Force a full sync, rebase, and build regardless of upstream releases"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RUNTIME_REPO_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Check for new Floorp upstream releases
+        id: check-releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FLOORP_TAG=$(gh release view --repo Floorp-Projects/Floorp --json tagName -q '.tagName')
+          
+          RUN_TITLE=$(gh run list --repo Floorp-Projects/Floorp --workflow "(P) ⚠️ Package and Publish Release" --limit 100 --json displayTitle -q '.[].displayTitle' | grep "Package release from Runtime run" | head -n 1)
+          
+          RUNTIME_RUN_ID=$(echo "$RUN_TITLE" | grep -oE '[0-9]+' | head -n 1)
+          
+          if [ -z "$RUNTIME_RUN_ID" ]; then
+            echo "Error: Could not extract Runtime Run ID from workflow title."
+            exit 1
+          fi
+          
+          echo "Upstream manually selected Runtime Run ID: $RUNTIME_RUN_ID"
+          
+          RUNTIME_SHA=$(gh api repos/Floorp-Projects/Floorp-Runtime/actions/runs/$RUNTIME_RUN_ID -q '.head_sha')
+          
+          echo "Runtime Commit SHA: $RUNTIME_SHA"
+          
+          RUNTIME_TAG=$(gh api --paginate repos/Floorp-Projects/Floorp-Runtime/tags -q ".[] | select(.commit.sha == \"$RUNTIME_SHA\") | .name" | head -n 1)
+
+          if [ -z "$RUNTIME_TAG" ] || [ "$RUNTIME_TAG" == "null" ]; then
+            echo "Error: Failed to find a matching Runtime release tag for SHA $RUNTIME_SHA."
+            exit 1
+          fi
+
+          echo "Selected Floorp Tag: $FLOORP_TAG"
+          echo "Selected Runtime Tag: $RUNTIME_TAG"
+
+          LAST_FLOORP=""
+          if [ -f .last-floorp-release ]; then LAST_FLOORP=$(cat .last-floorp-release); fi
+
+          echo "floorp_tag=$FLOORP_TAG" >> "$GITHUB_OUTPUT"
+          echo "runtime_tag=$RUNTIME_TAG" >> "$GITHUB_OUTPUT"
+
+          if [ "$LAST_FLOORP" != "$FLOORP_TAG" ] || [ "${{ inputs.force_build }}" == "true" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync Floorp-Runtime git repository
+        if: steps.check-releases.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RUNTIME_REPO_TOKEN }}
+        run: |
+          echo "Syncing the Git history of ${{ github.repository }}-runtime with upstream..."
+          gh repo sync ${{ github.repository }}-runtime --source Floorp-Projects/Floorp-Runtime --force
+          
+      - name: Mirror latest Floorp-Runtime release assets to my fork
+        if: steps.check-releases.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RUNTIME_REPO_TOKEN }}
+        run: |
+          RUNTIME_TAG="${{ steps.check-releases.outputs.runtime_tag }}"
+
+          ASSETS=$(gh release view "$RUNTIME_TAG" --repo MatiX221/Floorp-Runtime --json assets -q '.assets[].name' 2>/dev/null || echo "")
+
+          if echo "$ASSETS" | grep -q "floorp-windows-x86_64-moz-artifact.zip" && \
+             echo "$ASSETS" | grep -q "windows-x86_64-application-ini.zip" && \
+             echo "$ASSETS" | grep -q "windows-x86_64-dist-host.zip"; then
+            echo "✅ All required artifacts for $RUNTIME_TAG already exist on MatiX221/Floorp-Runtime. Skipping mirror."
+          else
+            echo "⬇️ Assets missing or incomplete on fork. Downloading $RUNTIME_TAG assets from upstream..."
+            mkdir -p /tmp/runtime-assets && cd /tmp/runtime-assets
+
+            for FILE in "floorp-windows-x86_64-moz-artifact.zip" "windows-x86_64-dist-host.zip" "windows-x86_64-application-ini.zip"; do
+              gh release download "$RUNTIME_TAG" --repo Floorp-Projects/Floorp-Runtime --pattern "$FILE" --clobber
+            done
+
+            echo "⬆️ Uploading assets to MatiX221/Floorp-Runtime..."
+            if ! gh release view "$RUNTIME_TAG" --repo MatiX221/Floorp-Runtime > /dev/null 2>&1; then
+              gh release create "$RUNTIME_TAG" --repo MatiX221/Floorp-Runtime --title "$RUNTIME_TAG" --notes "Mirrored from upstream Floorp-Runtime"
+            fi
+            gh release upload "$RUNTIME_TAG" --repo MatiX221/Floorp-Runtime *.zip --clobber
+          fi
+
+      - name: Sync main to upstream (Stable Release)
+        if: steps.check-releases.outputs.changed == 'true'
+        run: |
+          git remote add upstream https://github.com/Floorp-Projects/Floorp.git
+
+          git fetch upstream --tags
+
+          git checkout main
+
+          git reset --hard "${{ steps.check-releases.outputs.floorp_tag }}"
+
+          git checkout origin/main -- .github/workflows/auto-sync-and-build.yml .github/workflows/publish-update.yml
+
+          echo "${{ steps.check-releases.outputs.floorp_tag }}" > .last-floorp-release
+
+          git add .github/workflows/auto-sync-and-build.yml .github/workflows/publish-update.yml .last-floorp-release
+          git commit -m "Sync to Floorp ${{ steps.check-releases.outputs.floorp_tag }} & Runtime ${{ steps.check-releases.outputs.runtime_tag }} [skip ci]" --allow-empty
+
+          git remote set-url origin https://x-access-token:${{ secrets.RUNTIME_REPO_TOKEN }}@github.com/${{ github.repository }}.git
+          git push origin main --force
+
+      - name: Rebase my-custom onto updated main
+        if: steps.check-releases.outputs.changed == 'true'
+        id: rebase
+        run: |
+          git fetch origin my-custom
+          git checkout -B auto-build origin/my-custom
+          if git rebase main; then
+            echo "success=true" >> "$GITHUB_OUTPUT"
+            git push origin auto-build --force
+          else
+            git rebase --abort
+            echo "success=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notify Discord of rebase conflict
+        if: steps.rebase.outputs.success == 'false'
+        run: |
+          curl -H "Content-Type: application/json" \
+            -d '{"content": "@everyone ⚠️ **Auto-Rebase Conflict!** my-custom could not be automatically applied to the new Floorp release. Manual rebase needed before the next build."}' \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}"
+          exit 1
+
+      - name: Trigger Package workflow
+        if: steps.rebase.outputs.success == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RUNTIME_REPO_TOKEN }}
+        run: |
+          gh workflow run "(A) 📦️ Package" \
+            --repo ${{ github.repository }} \
+            --ref auto-build \
+            -f platform=Windows-x64 \
+            -f skip_signing=true
+
+      - name: Notify Discord of general workflow failure
+        if: failure() && steps.rebase.outputs.success != 'false'
+        run: |
+          curl -H "Content-Type: application/json" \
+            -d '{"content": "@everyone ❌ **Workflow Failed!** The `Sync upstream, rebase, and build` job encountered an error. Check the logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}"
