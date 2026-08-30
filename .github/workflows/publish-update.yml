@@ -45,7 +45,6 @@ jobs:
             gh run download $ID --repo ${{ github.repository }} --pattern "*installer-unsigned*" || true
           done
           
-          # Unpack archives into distinct folders to preserve platform namespace
           find . -iname "*.zip" | while read -r zip_file; do
             dir="$(dirname "$zip_file")/extracted_$(basename "$zip_file" .zip)"
             mkdir -p "$dir"
@@ -98,7 +97,6 @@ jobs:
             
             echo "Processing $PLATFORM..."
             
-            # Locate application.ini inside the platform-matched extracted folder
             INI=$(find . -path "*${PLATFORM}*" -iname "application.ini" | head -n1)
             if [ -z "$INI" ]; then
               echo "Could not find application.ini for $PLATFORM! Searching fallback..." >&2
@@ -137,14 +135,14 @@ jobs:
 
             mkdir -p /tmp/publish-repo/$UPDATE_DIR
             
-            cat > /tmp/publish-repo/$UPDATE_DIR/update.xml <<EOF
-            <?xml version="1.0"?>
+            XML_DATA="<?xml version=\"1.0\"?>
             <updates>
-              <update type="minor" displayVersion="${GECKO_VERSION}@${FLOORP_VERSION}" appVersion="${GECKO_VERSION}" platformVersion="${GECKO_VERSION}" buildID="${BUILDID}" appVersion2="${FLOORP_VERSION}" buildID2="${BUILDID2}">
-                <patch type="complete" URL="$MAR_URL" hashFunction="sha512" hashValue="${HASH}" size="${SIZE}"/>
+              <update type=\"minor\" displayVersion=\"${GECKO_VERSION}@${FLOORP_VERSION}\" appVersion=\"${GECKO_VERSION}\" platformVersion=\"${GECKO_VERSION}\" buildID=\"${BUILDID}\" appVersion2=\"${FLOORP_VERSION}\" buildID2=\"${BUILDID2}\">
+                <patch type=\"complete\" URL=\"$MAR_URL\" hashFunction=\"sha512\" hashValue=\"${HASH}\" size=\"${SIZE}\"/>
               </update>
-            </updates>
-            EOF
+            </updates>"
+            
+            echo "$XML_DATA" > /tmp/publish-repo/$UPDATE_DIR/update.xml
             
             echo "Generated /tmp/publish-repo/$UPDATE_DIR/update.xml"
           done
