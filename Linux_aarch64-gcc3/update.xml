@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
   <updates>
-    <update type="minor" displayVersion="154.0.2@12.17.1" appVersion="154.0.2" platformVersion="154.0.2" buildID="20260830042224" appVersion2="12.17.1" buildID2="01a050e6-d4e5-7189-b8b1-8201cfba0b69">
-      <patch type="complete" URL="https://github.com/MatiX221/Floorp/releases/download/update-12.17.1-33294332636/update-linux-aarch64.mar" hashFunction="sha512" hashValue="be9ede60fb6baf356811c7949199393a7b4db1ecc08e4ee3911c3a63ca4aefd2f4baef1ff8b19c108f143d0b4f9ee5ade0a9a894961f65832bfd19f991cff8ba" size="86551784"/>
+    <update type="minor" displayVersion="154.0.2@12.17.1" appVersion="154.0.2" platformVersion="154.0.2" buildID="20260830084632" appVersion2="12.17.1" buildID2="01a051d8-a32c-772f-9426-21344e8accf9">
+      <patch type="complete" URL="https://github.com/MatiX221/Floorp/releases/download/update-12.17.1-33303014374/update-linux-aarch64.mar" hashFunction="sha512" hashValue="a9e89e18cd9dd90172565b9b9c81676c0bd30d7133edb95f77fa25e82779ea257ada634e2d3fa4fa51d9031fe5917bbcb1d85847d49d51244dbd0e594eac2eff" size="86551020"/>
     </update>
   </updates>
