@@ -18,7 +18,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RUNS_JSON=$(gh run list --workflow="(A) 📦️ Package" --branch="auto-build" --limit=3 --json databaseId,status,conclusion)
+          RUNS_JSON=$(gh run list --repo ${{ github.repository }} --workflow="(A) 📦️ Package" --branch="auto-build" --limit=3 --json databaseId,status,conclusion)
           
           RUN_COUNT=$(echo "$RUNS_JSON" | jq length)
           if [ "$RUN_COUNT" -lt 3 ]; then
