@@ -123,9 +123,9 @@ jobs:
             HASH=$(sha512sum "$MARFILE" | cut -d' ' -f1)
             SIZE=$(stat -c%s "$MARFILE")
 
-            TAG="update-${FLOORP_VERSION}-${BUILDID}"
+            TAG="update-${FLOORP_VERSION}-${{ github.run_id }}"
             
-            gh release create "$TAG" --title "Update ${FLOORP_VERSION}" --notes "Automated MAR patch for build ${BUILDID}" --repo ${{ github.repository }} || echo "Release $TAG already exists."
+            gh release create "$TAG" --title "Update ${FLOORP_VERSION}" --notes "Automated Multi-Platform MAR update" --repo ${{ github.repository }} || echo "Release $TAG already exists."
 
             MAR_UPLOAD_NAME="update-${PLATFORM}.mar"
             cp "$MARFILE" "$MAR_UPLOAD_NAME"
