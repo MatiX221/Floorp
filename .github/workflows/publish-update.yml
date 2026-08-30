@@ -1,0 +1,143 @@
+name: Publish self-hosted update
+
+on:
+  workflow_run:
+    workflows: ["(A) 📦️ Package"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine Run IDs and Wait for all platforms
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUNS_JSON=$(gh run list --workflow="(A) 📦️ Package" --branch="auto-build" --limit=3 --json databaseId,status,conclusion)
+          
+          RUN_COUNT=$(echo "$RUNS_JSON" | jq length)
+          if [ "$RUN_COUNT" -lt 3 ]; then
+            echo "Waiting for Windows x64, Linux x64, and Linux aarch64 runs to appear..."
+            exit 0
+          fi
+          
+          FAILED_OR_PENDING=$(echo "$RUNS_JSON" | jq '[.[] | select(.status != "completed" or .conclusion != "success")] | length')
+          if [ "$FAILED_OR_PENDING" -gt 0 ]; then
+            echo "A platform is still building (or failed). Waiting for all 3 to succeed."
+            exit 0
+          fi
+          
+          RUN_ID_1=$(echo "$RUNS_JSON" | jq -r '.[0].databaseId')
+          RUN_ID_2=$(echo "$RUNS_JSON" | jq -r '.[1].databaseId')
+          RUN_ID_3=$(echo "$RUNS_JSON" | jq -r '.[2].databaseId')
+          
+          echo "All workflows succeeded! Downloading artifacts..."
+          mkdir -p /tmp/artifacts && cd /tmp/artifacts
+          
+          for ID in $RUN_ID_1 $RUN_ID_2 $RUN_ID_3; do
+            gh run download $ID --repo ${{ github.repository }} --pattern "*mar-full-unsigned*" || true
+            gh run download $ID --repo ${{ github.repository }} --pattern "*unsigned-binary*" || true
+            gh run download $ID --repo ${{ github.repository }} --pattern "*unsigned-installer*" || true
+          done
+          
+          find . -iname "*.zip" -exec sh -c 'unzip -o -q "$1" -d "$(dirname "$1")"' _ {} \;
+          find . -iname "*.tar.xz" -exec sh -c 'tar -xf "$1" -C "$(dirname "$1")"' _ {} \;
+
+      - name: Generate update.xml and Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+          cd /tmp
+          git clone --depth 1 https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git publish-repo
+          cd publish-repo
+
+          if git ls-remote --exit-code --heads origin updates > /dev/null 2>&1; then
+            git fetch origin updates:updates
+            git checkout updates
+          else
+            git checkout --orphan updates
+            git rm -rf . > /dev/null 2>&1 || true
+          fi
+
+          cd /tmp/artifacts
+          
+          find . -iname "*.mar" | while read MARFILE; do
+            BASENAME=$(basename "$MARFILE")
+            
+            if [[ "$BASENAME" == *"windows-x86_64"* ]]; then
+              PLATFORM="windows-x86_64"
+              UPDATE_DIR="WINNT/x86_64"
+            elif [[ "$BASENAME" == *"linux-x86_64"* ]]; then
+              PLATFORM="linux-x86_64"
+              UPDATE_DIR="Linux/x86_64"
+            elif [[ "$BASENAME" == *"linux-aarch64"* ]]; then
+              PLATFORM="linux-aarch64"
+              UPDATE_DIR="Linux/aarch64"
+            else
+              echo "Unknown platform for $BASENAME, skipping..."
+              continue
+            fi
+            
+            echo "Processing $PLATFORM..."
+            
+            INI=$(find . -path "*${PLATFORM}*" -iname "application.ini" | head -n1)
+            if [ -z "$INI" ]; then
+              echo "Could not find application.ini for $PLATFORM!" >&2
+              continue
+            fi
+
+            RAW_VERSION=$(grep -m1 "^Version=" "$INI" | cut -d= -f2 | tr -d '\r')
+            FLOORP_VERSION=$(echo "$RAW_VERSION" | cut -d@ -f1)
+            GECKO_VERSION=$(echo "$RAW_VERSION" | cut -d@ -f2)
+            BUILDID=$(grep -m1 "^BuildID=" "$INI" | cut -d= -f2 | tr -d '\r')
+
+            BUILDID2FILE=$(find . -path "*${PLATFORM}*" -iname "buildid2" | head -n1)
+            if [ -z "$BUILDID2FILE" ]; then
+              BUILDID2=""
+            else
+              BUILDID2=$(cat "$BUILDID2FILE" | tr -d '[:space:]')
+            fi
+
+            HASH=$(sha512sum "$MARFILE" | cut -d' ' -f1)
+            SIZE=$(stat -c%s "$MARFILE")
+
+            TAG="update-${FLOORP_VERSION}-${BUILDID}"
+            
+            gh release create "$TAG" --title "Update ${FLOORP_VERSION}" --notes "Automated MAR patch for build ${BUILDID}" --repo ${{ github.repository }} || echo "Release $TAG already exists."
+
+            MAR_UPLOAD_NAME="update-${PLATFORM}.mar"
+            cp "$MARFILE" "$MAR_UPLOAD_NAME"
+            gh release upload "$TAG" "$MAR_UPLOAD_NAME" --clobber --repo ${{ github.repository }}
+
+            MAR_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/$MAR_UPLOAD_NAME"
+
+            mkdir -p /tmp/publish-repo/$UPDATE_DIR
+            
+            cat > /tmp/publish-repo/$UPDATE_DIR/update.xml <<EOF
+            <?xml version="1.0"?>
+            <updates>
+              <update type="minor" displayVersion="${GECKO_VERSION}@${FLOORP_VERSION}" appVersion="${GECKO_VERSION}" platformVersion="${GECKO_VERSION}" buildID="${BUILDID}" appVersion2="${FLOORP_VERSION}" buildID2="${BUILDID2}">
+                <patch type="complete" URL="$MAR_URL" hashFunction="sha512" hashValue="${HASH}" size="${SIZE}"/>
+              </update>
+            </updates>
+          EOF
+            echo "Generated /tmp/publish-repo/$UPDATE_DIR/update.xml"
+          done
+
+          cd /tmp/publish-repo
+          git add .
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "Publish updates [skip ci]"
+            git push origin updates
+            echo "Updates pushed to 'updates' branch successfully!"
+          else
+            echo "No changes detected. Skipping commit."
+          fi
