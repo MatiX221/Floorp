@@ -83,13 +83,13 @@ jobs:
             
             if [[ "$BASENAME" == *"windows-x86_64"* ]]; then
               PLATFORM="windows-x86_64"
-              UPDATE_DIR="WINNT/x86_64"
+              UPDATE_DIR="WINNT_x86_64-msvc-x64"
             elif [[ "$BASENAME" == *"linux-x86_64"* ]]; then
               PLATFORM="linux-x86_64"
-              UPDATE_DIR="Linux/x86_64"
+              UPDATE_DIR="Linux_x86_64-gcc3"
             elif [[ "$BASENAME" == *"linux-aarch64"* ]]; then
               PLATFORM="linux-aarch64"
-              UPDATE_DIR="Linux/aarch64"
+              UPDATE_DIR="Linux_aarch64-gcc3"
             else
               echo "Unknown platform for $BASENAME, skipping..."
               continue
