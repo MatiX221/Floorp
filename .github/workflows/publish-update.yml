@@ -1,0 +1,236 @@
+name: Publish self-hosted update
+
+on:
+  workflow_run:
+    workflows: ["(A) 📦️ Package"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine Run IDs and Wait for all platforms
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUNS_JSON=$(gh run list --repo ${{ github.repository }} --workflow="(A) 📦️ Package" --branch="auto-build" --limit=3 --json databaseId,status,conclusion)
+          
+          RUN_COUNT=$(echo "$RUNS_JSON" | jq length)
+          if [ "$RUN_COUNT" -lt 3 ]; then
+            echo "Waiting for Windows x64, Linux x64, and Linux aarch64 runs to appear..."
+            exit 0
+          fi
+          
+          FAILED_OR_PENDING=$(echo "$RUNS_JSON" | jq '[.[] | select(.status != "completed" or .conclusion != "success")] | length')
+          if [ "$FAILED_OR_PENDING" -gt 0 ]; then
+            echo "A platform is still building (or failed). Waiting for all 3 to succeed."
+            exit 0
+          fi
+          
+          RUN_ID_1=$(echo "$RUNS_JSON" | jq -r '.[0].databaseId')
+          RUN_ID_2=$(echo "$RUNS_JSON" | jq -r '.[1].databaseId')
+          RUN_ID_3=$(echo "$RUNS_JSON" | jq -r '.[2].databaseId')
+          
+          echo "All workflows succeeded! Downloading artifacts..."
+          mkdir -p /tmp/artifacts && cd /tmp/artifacts
+          
+          for ID in $RUN_ID_1 $RUN_ID_2 $RUN_ID_3; do
+            gh run download $ID --repo ${{ github.repository }} --pattern "*mar-full-unsigned*" || true
+            gh run download $ID --repo ${{ github.repository }} --pattern "*unsigned-binary*" || true
+            gh run download $ID --repo ${{ github.repository }} --pattern "*installer-unsigned*" || true
+          done
+          
+          find . -iname "*.zip" | while read -r zip_file; do
+            dir="$(dirname "$zip_file")/extracted_$(basename "$zip_file" .zip)"
+            mkdir -p "$dir"
+            unzip -o -q "$zip_file" -d "$dir"
+          done
+
+          find . -iname "*.tar.xz" | while read -r tar_file; do
+            dir="$(dirname "$tar_file")/extracted_$(basename "$tar_file" .tar.xz)"
+            mkdir -p "$dir"
+            tar -xf "$tar_file" -C "$dir"
+          done
+
+      - name: Generate update.xml and Publish Artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+          cd /tmp
+          git clone --depth 1 https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git publish-repo
+          cd publish-repo
+
+          if git ls-remote --exit-code --heads origin updates > /dev/null 2>&1; then
+            git fetch origin updates:updates
+            git checkout updates
+          else
+            git checkout --orphan updates
+            git rm -rf . > /dev/null 2>&1 || true
+          fi
+
+          cd /tmp/artifacts
+          
+          find . -iname "*.mar" | while read -r MARFILE; do
+            BASENAME=$(basename "$MARFILE")
+            
+            if [[ "$BASENAME" == *"windows-x86_64"* ]]; then
+              PLATFORM="windows-x86_64"
+              UPDATE_DIR="WINNT_x86_64-msvc-x64"
+            elif [[ "$BASENAME" == *"linux-x86_64"* ]]; then
+              PLATFORM="linux-x86_64"
+              UPDATE_DIR="Linux_x86_64-gcc3"
+            elif [[ "$BASENAME" == *"linux-aarch64"* ]]; then
+              PLATFORM="linux-aarch64"
+              UPDATE_DIR="Linux_aarch64-gcc3"
+            else
+              echo "Unknown platform for $BASENAME, skipping..."
+              echo "PUBLISH_FAILED=true" >> $GITHUB_ENV
+              continue
+            fi
+            
+            echo "Processing $PLATFORM..."
+            
+            INI=$(find . -path "*${PLATFORM}*" -iname "application.ini" | head -n1)
+            if [ -z "$INI" ]; then
+              echo "Could not find application.ini for $PLATFORM! Searching fallback..." >&2
+              INI=$(find . -iname "application.ini" | grep -i "${PLATFORM}" | head -n1 || true)
+            fi
+
+            if [ -z "$INI" ]; then
+              echo "Error: application.ini still not found for $PLATFORM!" >&2
+              echo "PUBLISH_FAILED=true" >> $GITHUB_ENV
+              continue
+            fi
+
+            RAW_VERSION=$(grep -m1 "^Version=" "$INI" | cut -d= -f2 | tr -d '\r')
+            FLOORP_VERSION=$(echo "$RAW_VERSION" | cut -d@ -f1)
+            GECKO_VERSION=$(echo "$RAW_VERSION" | cut -d@ -f2)
+            BUILDID=$(grep -m1 "^BuildID=" "$INI" | cut -d= -f2 | tr -d '\r')
+            
+            echo "FLOORP_VERSION=${FLOORP_VERSION}" >> $GITHUB_ENV
+
+            BUILDID2FILE=$(find . -path "*${PLATFORM}*" -iname "buildid2" | head -n1)
+            if [ -z "$BUILDID2FILE" ]; then
+              BUILDID2=""
+            else
+              BUILDID2=$(cat "$BUILDID2FILE" | tr -d '[:space:]')
+            fi
+
+            HASH=$(sha512sum "$MARFILE" | cut -d' ' -f1)
+            SIZE=$(stat -c%s "$MARFILE")
+
+            TAG="update-${FLOORP_VERSION}"
+            
+            gh release create "$TAG" --title "Update ${FLOORP_VERSION}" --notes "Automated Multi-Platform Release" --repo ${{ github.repository }} || echo "Release $TAG already exists."
+
+            MAR_UPLOAD_NAME="update-${PLATFORM}.mar"
+            cp "$MARFILE" "$MAR_UPLOAD_NAME"
+            gh release upload "$TAG" "$MAR_UPLOAD_NAME" --clobber --repo ${{ github.repository }}
+
+            if [[ "$PLATFORM" == "windows-x86_64" ]]; then
+              EXE_FILE=$(find . -path "*windows-x86_64*" -iname "*.exe" | head -n1)
+              if [ -n "$EXE_FILE" ]; then
+                gh release upload "$TAG" "$EXE_FILE" --clobber --repo ${{ github.repository }}
+              else
+                echo "Warning: .exe file not found for Windows!" >&2
+                echo "PUBLISH_FAILED=true" >> $GITHUB_ENV
+              fi
+            elif [[ "$PLATFORM" == "linux-x86_64" ]]; then
+              DEB_FILE=$(find . -path "*x86_64*" -iname "*.deb" | head -n1)
+              if [ -n "$DEB_FILE" ]; then
+                cp "$DEB_FILE" "floorp-linux-x86_64.deb"
+                gh release upload "$TAG" "floorp-linux-x86_64.deb" --clobber --repo ${{ github.repository }}
+              else
+                echo "Warning: .deb file not found for Linux x86_64!" >&2
+                echo "PUBLISH_FAILED=true" >> $GITHUB_ENV
+              fi
+              
+              TAR_FILE=$(find . -path "*x86_64*" -iname "*.tar.xz" | head -n1)
+              if [ -n "$TAR_FILE" ]; then
+                cp "$TAR_FILE" "floorp-linux-x86_64.tar.xz"
+                gh release upload "$TAG" "floorp-linux-x86_64.tar.xz" --clobber --repo ${{ github.repository }}
+              else
+                echo "Warning: .tar.xz file not found for Linux x86_64!" >&2
+                echo "PUBLISH_FAILED=true" >> $GITHUB_ENV
+              fi
+            elif [[ "$PLATFORM" == "linux-aarch64" ]]; then
+              TAR_FILE=$(find . -path "*aarch64*" -iname "*.tar.xz" | head -n1)
+              if [ -n "$TAR_FILE" ]; then
+                cp "$TAR_FILE" "floorp-linux-aarch64.tar.xz"
+                gh release upload "$TAG" "floorp-linux-aarch64.tar.xz" --clobber --repo ${{ github.repository }}
+              else
+                echo "Warning: .tar.xz file not found for Linux aarch64!" >&2
+                echo "PUBLISH_FAILED=true" >> $GITHUB_ENV
+              fi
+            fi
+
+            MAR_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/$MAR_UPLOAD_NAME"
+
+            mkdir -p /tmp/publish-repo/$UPDATE_DIR
+            
+            XML_DATA="<?xml version=\"1.0\"?>
+            <updates>
+              <update type=\"minor\" displayVersion=\"${GECKO_VERSION}@${FLOORP_VERSION}\" appVersion=\"${GECKO_VERSION}\" platformVersion=\"${GECKO_VERSION}\" buildID=\"${BUILDID}\" appVersion2=\"${FLOORP_VERSION}\" buildID2=\"${BUILDID2}\">
+                <patch type=\"complete\" URL=\"$MAR_URL\" hashFunction=\"sha512\" hashValue=\"${HASH}\" size=\"${SIZE}\"/>
+              </update>
+            </updates>"
+            
+            echo "$XML_DATA" > /tmp/publish-repo/$UPDATE_DIR/update.xml
+            
+            echo "Generated /tmp/publish-repo/$UPDATE_DIR/update.xml"
+          done
+
+          cd /tmp/publish-repo
+          git add .
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "Publish updates [skip ci]"
+            git push origin updates
+            echo "Updates pushed to 'updates' branch successfully!"
+          else
+            echo "No changes detected. Skipping commit."
+          fi
+
+      - name: Trigger Arch & NixOS Package Build (Push to Gitea)
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          if [ "$PUBLISH_FAILED" == "true" ]; then
+            echo "Error: One or more platforms missed critical assets or failed to process."
+            exit 1
+          fi
+
+          if [ -z "$FLOORP_VERSION" ]; then
+            echo "Error: FLOORP_VERSION is empty, something failed in artifact extraction."
+            exit 1
+          fi
+
+          HASH=$(sha256sum /tmp/artifacts/floorp-linux-x86_64.tar.xz | awk '{print $1}')
+
+          cd /tmp
+          git clone "https://admin:${GITEA_TOKEN}@git.mateuszpiasecki.com/admin/matix-aur.git"
+          cd matix-aur
+          
+          sed -i "s/^pkgver=.*/pkgver=${FLOORP_VERSION}/" floorp-matix-bin/PKGBUILD
+          
+          sed -i "s/version = \".*\"/version = \"${FLOORP_VERSION}\"/" floorp-matix-bin/flake.nix
+          sed -i "s/sha256 = \".*\"/sha256 = \"$HASH\"/" floorp-matix-bin/flake.nix
+          
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add floorp-matix-bin/PKGBUILD floorp-matix-bin/flake.nix
+          
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "chore: bump floorp to ${FLOORP_VERSION} for Arch and NixOS"
+            git push origin main
+            echo "Successfully pushed version bump to Gitea! Arch will build, NixOS is ready."
+          else
+            echo "Version is already ${FLOORP_VERSION}. No bump needed."
+          fi
