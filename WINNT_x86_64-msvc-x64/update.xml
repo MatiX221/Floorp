@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
   <updates>
-    <update type="minor" displayVersion="156.0.1@12.18.0" appVersion="156.0.1" platformVersion="156.0.1" buildID="20260917162144" appVersion2="12.18.0" buildID2="01a0b02b-fbba-710b-83a6-64e25d15037b">
-      <patch type="complete" URL="https://github.com/MatiX221/Floorp/releases/download/update-12.18.0/update-windows-x86_64.mar" hashFunction="sha512" hashValue="8ee978c68cb5610ee14b869b7d0be8cbc597606cd3881504d9e12bde1e4c885930daca9cd7cc949850bd380880120a410b976f0e6b0b69a1c2a777d9e59a262a" size="121941869"/>
+    <update type="minor" displayVersion="156.0.1@12.18.1" appVersion="156.0.1" platformVersion="156.0.1" buildID="20260923104644" appVersion2="12.18.1" buildID2="01a0cddf-4776-708c-ba35-5561a62461ea">
+      <patch type="complete" URL="https://github.com/MatiX221/Floorp/releases/download/update-12.18.1/update-windows-x86_64.mar" hashFunction="sha512" hashValue="af360f1d6da2e6d19562c6b18d4026101b7f4c4e1e14b07f654e057e714c7762e6f2fcc25bc2aba85359655e463aa4df93ccfa2adf026aba9310257f37a5de97" size="121974669"/>
     </update>
   </updates>
