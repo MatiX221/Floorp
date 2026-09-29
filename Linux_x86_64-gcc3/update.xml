@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
   <updates>
-    <update type="minor" displayVersion="156.0.1@12.18.1" appVersion="156.0.1" platformVersion="156.0.1" buildID="20260923104639" appVersion2="12.18.1" buildID2="01a0cddf-0043-7666-b981-7ac98c628044">
-      <patch type="complete" URL="https://github.com/MatiX221/Floorp/releases/download/update-12.18.1/update-linux-x86_64.mar" hashFunction="sha512" hashValue="bb81a0ff8172befdae1fd53c7231d62552e29b28ee0d95d555db6521dc036524bc874395b60dd9cbd1376020bb3c496c9fab1ad54fbbc1942031afb91f207b35" size="106081328"/>
+    <update type="minor" displayVersion="157.0@12.19.0" appVersion="157.0" platformVersion="157.0" buildID="20260929215935" appVersion2="12.19.0" buildID2="01a0ef2d-3393-7698-a809-6062b722d661">
+      <patch type="complete" URL="https://github.com/MatiX221/Floorp/releases/download/update-12.19.0/update-linux-x86_64.mar" hashFunction="sha512" hashValue="64529e68bd19b0c6742d9baa31106531d51c819c8e7fe76d915610a2d47f620c715928ad899ffcd7df59c974da48f584cb67658bf7887eed4fb142388522d591" size="106706916"/>
     </update>
   </updates>
