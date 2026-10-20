@@ -35,43 +35,32 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           FLOORP_TAG=$(gh release view --repo Floorp-Projects/Floorp --json tagName -q '.tagName')
-          
-          RUN_TITLE=$(gh run list --repo Floorp-Projects/Floorp --workflow "(P) ⚠️ Package and Publish Release" --limit 100 --json displayTitle -q '.[].displayTitle' | grep "Package release from Runtime run" | head -n 1)
-          
-          RUNTIME_RUN_ID=$(echo "$RUN_TITLE" | grep -oE '[0-9]+' | head -n 1)
-          
-          if [ -z "$RUNTIME_RUN_ID" ]; then
-            echo "Error: Could not extract Runtime Run ID from workflow title."
-            exit 1
-          fi
-          
-          echo "Upstream manually selected Runtime Run ID: $RUNTIME_RUN_ID"
-          
-          RUNTIME_SHA=$(gh api repos/Floorp-Projects/Floorp-Runtime/actions/runs/$RUNTIME_RUN_ID -q '.head_sha')
-          
-          echo "Runtime Commit SHA: $RUNTIME_SHA"
-          
-          RUNTIME_TAG=$(gh api --paginate repos/Floorp-Projects/Floorp-Runtime/tags -q ".[] | select(.commit.sha == \"$RUNTIME_SHA\") | .name" | head -n 1)
-
-          if [ -z "$RUNTIME_TAG" ] || [ "$RUNTIME_TAG" == "null" ]; then
-            echo "Error: Failed to find a matching Runtime release tag for SHA $RUNTIME_SHA."
-            exit 1
-          fi
-
-          echo "Selected Floorp Tag: $FLOORP_TAG"
-          echo "Selected Runtime Tag: $RUNTIME_TAG"
 
           LAST_FLOORP=""
           if [ -f .last-floorp-release ]; then LAST_FLOORP=$(cat .last-floorp-release); fi
 
           echo "floorp_tag=$FLOORP_TAG" >> "$GITHUB_OUTPUT"
-          echo "runtime_tag=$RUNTIME_TAG" >> "$GITHUB_OUTPUT"
 
-          if [ "$LAST_FLOORP" != "$FLOORP_TAG" ] || [ "${{ inputs.force_build }}" == "true" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ "$LAST_FLOORP" = "$FLOORP_TAG" ] && [ "${{ inputs.force_build }}" != "true" ]; then
+            echo "Floorp $FLOORP_TAG already built. Nothing to do."
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          RUN_TITLE=$(gh run list --repo Floorp-Projects/Floorp --workflow "(P) ⚠️ Package and Publish Release" --limit 100 --json displayTitle -q '.[].displayTitle' | grep "Package release from Runtime run" | head -n 1)
+          RUNTIME_RUN_ID=$(echo "$RUN_TITLE" | grep -oE '[0-9]+' | head -n 1)
+          [ -z "$RUNTIME_RUN_ID" ] && { echo "Error: no Runtime Run ID in title."; exit 1; }
+
+          RUNTIME_SHA=$(gh api repos/Floorp-Projects/Floorp-Runtime/actions/runs/$RUNTIME_RUN_ID -q '.head_sha')
+          RUNTIME_TAG=$(gh api --paginate repos/Floorp-Projects/Floorp-Runtime/tags -q ".[] | select(.commit.sha == \"$RUNTIME_SHA\") | .name" | head -n 1)
+
+          if [ -z "$RUNTIME_TAG" ]; then
+            echo "Error: no Runtime tag for SHA $RUNTIME_SHA."
+            exit 1
+          fi
+
+          echo "runtime_tag=$RUNTIME_TAG" >> "$GITHUB_OUTPUT"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Sync Floorp-Runtime git repository
         if: steps.check-releases.outputs.changed == 'true'
